@@ -56,7 +56,8 @@ Third-party software
 
 This project uses open-source libraries (Tauri, Svelte, Rust crates, and
 others). Each dependency remains under its own license; see Cargo.lock,
-app/package.json and the respective upstream projects for details.
+app/package.json and the respective upstream projects for details. A summary is
+in THIRD_PARTY_NOTICES.md.
 
 Workshop metadata is fetched read-only through Valve's public Steam Web API.
 Use of that data is subject to Valve's applicable terms. This project does not
