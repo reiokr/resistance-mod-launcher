@@ -219,9 +219,10 @@ cargo run -- --headless-diagnostics
   collection source, description and pending count.
 - **Profile picker** in the top bar: selecting a profile applies its active
   list/order immediately, runs the conflict check, and marks the profile as
-  current. A yellow dot means the current list differs from the saved profile;
-  use **Salvesta praegune** in Profiilid to update it. **Salvesta** in the top
-  bar still writes the game config.
+  current. A yellow dot means the current list differs from the saved profile.
+  To add a mod to the current profile (including a manual non-collection mod),
+  enable it in **Modid**, then press **Salvesta profiil** in the top bar. The
+  separate **Salvesta** button writes the game config.
 - **Kategooriad** tab: category manager plus **Automaatne kategoriseerimine**.
   The preview shows counts and sample mods per category; **Rakenda** writes
   native categories and backs up `state.json` first. The overwrite checkbox
