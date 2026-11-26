@@ -5,8 +5,11 @@ independent Tauri 2 + Svelte 5 implementation that runs natively on Linux and
 manages the Windows/Proton install without Wine.
 
 **Status: core + Tauri 2 MVP.** The core CLI is read-only; the Tauri app can
-save `XComModOptions.ini` with a backup and launch WotC. See
-[`app/README.md`](app/README.md).
+save `XComModOptions.ini` with a backup and launch WotC. The UI is available in
+Estonian and English. See [`app/README.md`](app/README.md).
+
+Source: <https://github.com/reiokr/resistance-mod-launcher> ·
+[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
 ## What works
 
@@ -122,7 +125,9 @@ The library is UI-free so the Tauri backend can call it directly.
    - learning from manual category corrections (Naive Bayes) — done;
    - duplicate ID, class-override and missing-dependency checks — done;
    - mod config editor with encoding/line-ending preservation and backups — done;
-   - ReadMe viewer — done.
+   - ReadMe viewer — done;
+   - Estonian/English UI — done;
+   - public GPL-3.0 repository with CI — done.
 3. **Workshop**
    - metadata via Steam Web API — done (cached, read-only);
    - update indicators from `appworkshop_268500.acf` — done;
