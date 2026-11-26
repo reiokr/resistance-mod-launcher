@@ -106,6 +106,8 @@ This builds a release binary (embedded frontend), installs it to
 - `Resistance Mod Launcher` to the application menu
 - `~/.local/share/applications/xcom2-mod-launcher.desktop`
 - a 256px icon under `~/.local/share/icons/hicolor/256x256/apps/`
+- license/provenance documents under
+  `~/.local/share/doc/resistance-mod-launcher/`
 
 The old Windows-AML wrapper is a separate project; its start-menu entry is
 removed. It remains available through Steam / `Launcher/launcher.exe`, which is
@@ -121,6 +123,32 @@ cannot contain a second launcher choice. The non-Steam shortcut is the Steam
 equivalent: it appears in the library, not in the game's Launch Options
 dropdown. Putting the native app into XCOM 2's Launch Options would make Play
 open the launcher instead of the game.
+
+## AppImage
+
+```bash
+cd app
+./package-appimage.sh
+```
+
+This runs `pnpm tauri build` and assembles:
+
+```text
+dist/release/Resistance-Mod-Launcher-<version>-x86_64.AppImage
+dist/release/SHA256SUMS
+dist/release/LICENSE
+dist/release/NOTICE
+dist/release/PROVENANCE.md
+dist/release/THIRD_PARTY_NOTICES.md
+dist/release/README.md
+```
+
+The AppImage contains the same docs under
+`usr/lib/Resistance Mod Launcher/`. For systems without FUSE, run it with:
+
+```bash
+./Resistance-Mod-Launcher-0.1.0-x86_64.AppImage --appimage-extract-and-run
+```
 
 ## Compared to Windows AML
 

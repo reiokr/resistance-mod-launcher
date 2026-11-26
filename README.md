@@ -79,6 +79,28 @@ cd app
 ./install-native.sh
 ```
 
+Build a self-contained AppImage and a release directory:
+
+```bash
+cd app
+./package-appimage.sh
+```
+
+Output:
+
+```text
+dist/release/Resistance-Mod-Launcher-<version>-x86_64.AppImage
+dist/release/SHA256SUMS
+dist/release/LICENSE
+dist/release/NOTICE
+dist/release/PROVENANCE.md
+dist/release/THIRD_PARTY_NOTICES.md
+```
+
+The AppImage bundles the documentation above under
+`usr/lib/Resistance Mod Launcher/`. Pushing a `v*` tag runs the GitHub
+release workflow and attaches the AppImage plus checksums and legal files.
+
 Entry: **Resistance Mod Launcher**. The old Windows-AML wrapper is a
 separate project with the entry **XCOM 2 AML (Windows/Proton)**.
 
@@ -139,7 +161,8 @@ The library is UI-free so the Tauri backend can call it directly.
    - Feral VFS paths (`~/.local/share/feral-interactive/...`);
    - native `share/data/xcomgame/mods`.
 5. **Packaging**
-   - AppImage, AUR PKGBUILD, desktop entry.
+   - AppImage + release docs/checksums — done;
+   - AUR PKGBUILD — later (maintainer account needed).
 
 ## Requirements
 
