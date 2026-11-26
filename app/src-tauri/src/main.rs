@@ -213,8 +213,19 @@ fn load_snapshot() -> Result<AppSnapshot> {
         .map(|(index, id)| (id, index))
         .collect();
 
-    let all = settings.all_mods();
+    let mut all = settings.all_mods_with_workshop(paths.workshop_dir.as_deref())?;
     let cache = workshop::load_cache().unwrap_or_default();
+    for entry in &mut all {
+        if entry.name.as_deref().map_or(true, |name| name == entry.id) {
+            if let Some(title) = entry
+                .workshop_id
+                .and_then(|id| cache.items.get(&id.to_string()))
+                .and_then(|details| details.title.clone())
+            {
+                entry.name = Some(title);
+            }
+        }
+    }
     let local_times = workshop::local_times(&paths).unwrap_or_default();
     let mut mods = Vec::with_capacity(all.len());
     for entry in &all {
@@ -601,7 +612,7 @@ fn get_mod_details_impl(id: &str) -> Result<ModDetails> {
         .context("AML settings.json was not found")?;
     let settings = AmlRoot::load(&settings_path)?;
     let entry = settings
-        .all_mods()
+        .all_mods_with_workshop(paths.workshop_dir.as_deref())?
         .into_iter()
         .find(|entry| entry.id == id)
         .with_context(|| format!("Mod not found: {id}"))?;
@@ -841,6 +852,30 @@ fn main() {
         };
         match config_editor::read(mod_id, path) {
             Ok(file) => println!("{file:#?}"),
+            Err(err) => {
+                eprintln!("{err:#}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    if args.iter().any(|arg| arg == "--headless-mods") {
+        match load_snapshot() {
+            Ok(snapshot) => {
+                for entry in snapshot.mods {
+                    println!(
+                        "{}\t{}\t{}\t{}",
+                        entry.id,
+                        entry.name,
+                        entry
+                            .workshop_id
+                            .map(|id| id.to_string())
+                            .unwrap_or_else(|| "-".to_string()),
+                        entry.category
+                    );
+                }
+            }
             Err(err) => {
                 eprintln!("{err:#}");
                 std::process::exit(1);

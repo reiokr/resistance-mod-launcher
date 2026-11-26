@@ -9,7 +9,10 @@ install.
 
 - Estonian and English UI with an `ET`/`EN` toggle in the top bar.
 - Imports AML's `settings.json` for mod metadata (name, author, category,
-  workshop ID, size, path).
+  workshop ID, size, path) and merges new Workshop folders from
+  `steamapps/workshop/content/268500` on launch, so a newly subscribed mod
+  appears before AML has refreshed its own settings. New mods start inactive
+  and in `Unsorted`.
 - Treats `XComModOptions.ini` as the source of truth for the active list and
   load order (so the UI and the game agree).
 - Lists all mods, with search plus status/category/Workshop-tag filters.
@@ -147,7 +150,7 @@ The AppImage contains the same docs under
 `usr/lib/Resistance Mod Launcher/`. For systems without FUSE, run it with:
 
 ```bash
-./Resistance-Mod-Launcher-0.1.0-x86_64.AppImage --appimage-extract-and-run
+./Resistance-Mod-Launcher-<version>-x86_64.AppImage --appimage-extract-and-run
 ```
 
 ## Compared to Windows AML
@@ -179,6 +182,8 @@ cargo run -- --headless-diagnostics
 ```
 
 - `--headless-state` prints the summary and paths.
+- `--headless-mods` prints `id<TAB>name<TAB>workshop_id<TAB>category` for every
+  mod, including newly discovered Workshop subscriptions.
 - `--headless-save` runs the same backend save path as the UI, without a window.
   With the current list it returns `unchanged: true` and writes nothing.
 - `--headless-diagnostics` scans the saved active list and prints

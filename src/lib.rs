@@ -304,6 +304,76 @@ impl AmlRoot {
         });
         mods
     }
+
+    /// Merge AML's configured mods with Workshop folders that are not in
+    /// settings.json yet. New subscriptions therefore show up on the next
+    /// launch, before AML has been opened. Discovered mods start inactive and
+    /// in the `Unsorted` category until the user enables/categorizes them.
+    pub fn all_mods_with_workshop(&self, workshop_dir: Option<&Path>) -> Result<Vec<AmlMod>> {
+        let mut mods = self.all_mods();
+        let Some(workshop_dir) = workshop_dir else {
+            return Ok(mods);
+        };
+        let index = scan_workshop_mods(workshop_dir)?;
+        let known_ids: std::collections::HashSet<String> =
+            mods.iter().map(|entry| entry.id.to_lowercase()).collect();
+        let known_workshop: std::collections::HashSet<u64> = mods
+            .iter()
+            .filter_map(|entry| entry.workshop_id.filter(|id| *id > 0))
+            .collect();
+
+        let mut files: Vec<ModFile> = index.by_path.into_values().collect();
+        files.sort_by(|a, b| a.path.cmp(&b.path));
+        let mut seen_dirs: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+        for file in files {
+            let mod_dir = if file.path.is_dir() {
+                file.path.clone()
+            } else {
+                file.path
+                    .parent()
+                    .map(Path::to_path_buf)
+                    .unwrap_or_else(|| file.path.clone())
+            };
+            let Some(folder_id) = mod_dir
+                .file_name()
+                .and_then(|name| name.to_str())
+                .and_then(|name| name.parse::<u64>().ok())
+            else {
+                continue;
+            };
+            if folder_id == 0
+                || known_workshop.contains(&folder_id)
+                || known_ids.contains(&file.internal_id.to_lowercase())
+                || !seen_dirs.insert(mod_dir.clone())
+            {
+                continue;
+            }
+
+            mods.push(AmlMod {
+                id: if file.internal_id.is_empty() {
+                    folder_id.to_string()
+                } else {
+                    file.internal_id.clone()
+                },
+                name: file.title.clone(),
+                author: file.author.clone(),
+                description: file.description.clone(),
+                is_active: false,
+                index: -1,
+                path: Some(mod_dir.to_string_lossy().to_string()),
+                workshop_id: Some(folder_id),
+                source: Some(1),
+                note: None,
+                category: Some("Unsorted".to_string()),
+                size: directory_size(&mod_dir),
+                date_updated: None,
+                built_for_wotc: file.requires_xpack,
+                dependencies: Vec::new(),
+                ignored_dependencies: Vec::new(),
+            });
+        }
+        Ok(mods)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -359,18 +429,19 @@ pub fn scan_workshop_mods(workshop_dir: &Path) -> Result<ModIndex> {
             continue;
         };
 
-        let mut mod_files: Vec<PathBuf> = fs::read_dir(&path)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .map(|entry| entry.path())
-            .filter(|candidate| {
-                candidate
+        let mut mod_files: Vec<PathBuf> = Vec::new();
+        if let Ok(entries) = fs::read_dir(&path) {
+            for entry in entries.flatten() {
+                let candidate = entry.path();
+                let is_match = candidate
                     .extension()
                     .and_then(|ext| ext.to_str())
-                    .is_some_and(|ext| ext.eq_ignore_ascii_case("xcomod"))
-            })
-            .collect();
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("xcommod"));
+                if is_match {
+                    mod_files.push(candidate);
+                }
+            }
+        }
         mod_files.sort();
 
         // Prefer the canonical <workshop-id>.XComMod, then anything else.
@@ -383,7 +454,7 @@ pub fn scan_workshop_mods(workshop_dir: &Path) -> Result<ModIndex> {
 
         if let Some(file) = chosen {
             if let Ok(mut parsed) = parse_xcomod(&file) {
-                if parsed.published_file_id.is_none() {
+                if parsed.published_file_id.unwrap_or(0) == 0 {
                     parsed.published_file_id = Some(workshop_id);
                 }
                 index.insert(parsed);
@@ -405,6 +476,24 @@ pub fn scan_workshop_mods(workshop_dir: &Path) -> Result<ModIndex> {
     Ok(index)
 }
 
+fn directory_size(path: &Path) -> i64 {
+    let Ok(entries) = fs::read_dir(path) else {
+        return 0;
+    };
+    let mut total = 0i64;
+    for entry in entries.flatten() {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_dir() {
+            total += directory_size(&entry.path());
+        } else if file_type.is_file() {
+            total += entry.metadata().map(|meta| meta.len() as i64).unwrap_or(0);
+        }
+    }
+    total
+}
+
 pub fn scan_local_mods(mod_dirs: &[PathBuf]) -> Result<ModIndex> {
     let mut index = ModIndex::default();
     for dir in mod_dirs {
@@ -416,18 +505,19 @@ pub fn scan_local_mods(mod_dirs: &[PathBuf]) -> Result<ModIndex> {
             if !path.is_dir() {
                 continue;
             }
-            let mut mod_files: Vec<PathBuf> = fs::read_dir(&path)
-                .into_iter()
-                .flatten()
-                .flatten()
-                .map(|entry| entry.path())
-                .filter(|candidate| {
-                    candidate
+            let mut mod_files: Vec<PathBuf> = Vec::new();
+            if let Ok(entries) = fs::read_dir(&path) {
+                for entry in entries.flatten() {
+                    let candidate = entry.path();
+                    if candidate
                         .extension()
                         .and_then(|ext| ext.to_str())
-                        .is_some_and(|ext| ext.eq_ignore_ascii_case("xcomod"))
-                })
-                .collect();
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("xcommod"))
+                    {
+                        mod_files.push(candidate);
+                    }
+                }
+            }
             mod_files.sort();
             if let Some(file) = mod_files.into_iter().next() {
                 if let Ok(parsed) = parse_xcomod(&file) {
@@ -454,6 +544,7 @@ pub fn parse_xcomod(path: &Path) -> Result<ModFile> {
     let valid_keys = [
         "publishedfileid",
         "title",
+        "author",
         "category",
         "description",
         "tags",
@@ -638,7 +729,7 @@ pub fn build_active_mods(
     ids: &[String],
 ) -> Result<Vec<ActiveMod>> {
     let index = build_mod_index(paths)?;
-    let all = settings.all_mods();
+    let all = settings.all_mods_with_workshop(paths.workshop_dir.as_deref())?;
     let by_id: HashMap<&str, &AmlMod> =
         all.iter().map(|entry| (entry.id.as_str(), entry)).collect();
 
@@ -967,6 +1058,56 @@ mod tests {
         assert_eq!(parsed.title.as_deref(), Some("Test Mod"));
         assert_eq!(parsed.description.as_deref(), Some("Hello\r\nworld"));
         assert!(parsed.requires_xpack);
+
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn discovers_new_workshop_mods() {
+        let temp = std::env::temp_dir().join(format!(
+            "xcom2-workshop-discovery-test-{}",
+            std::process::id()
+        ));
+        let workshop = temp.join("workshop");
+        fs::create_dir_all(workshop.join("123")).unwrap();
+        fs::create_dir_all(workshop.join("999")).unwrap();
+        fs::write(
+            workshop.join("123/123.XComMod"),
+            "[mod]\r\npublishedfileid=123\r\ntitle=Existing Mod\r\n",
+        )
+        .unwrap();
+        fs::write(
+            workshop.join("999/999.XComMod"),
+            "[mod]\r\npublishedfileid=999\r\ntitle=New Mod\r\nrequiresxpack=true\r\n",
+        )
+        .unwrap();
+
+        let mut settings = AmlRoot::default();
+        let mut group = AmlGroup::default();
+        group.entries.push(AmlMod {
+            id: "Existing".to_string(),
+            name: Some("Existing Mod".to_string()),
+            workshop_id: Some(123),
+            ..Default::default()
+        });
+        settings.mods.entries.insert("Test".to_string(), group);
+
+        let mods = settings
+            .all_mods_with_workshop(Some(&workshop))
+            .expect("catalog");
+        assert_eq!(mods.len(), 2);
+        let new = mods
+            .iter()
+            .find(|entry| entry.workshop_id == Some(999))
+            .expect("new workshop mod");
+        assert_eq!(new.name.as_deref(), Some("New Mod"));
+        assert!(!new.is_active);
+        assert_eq!(new.category.as_deref(), Some("Unsorted"));
+        assert!(new.built_for_wotc);
+        assert_eq!(
+            new.path.as_deref(),
+            Some(workshop.join("999").to_str().unwrap())
+        );
 
         let _ = fs::remove_dir_all(&temp);
     }

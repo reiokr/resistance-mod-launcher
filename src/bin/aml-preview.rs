@@ -102,7 +102,9 @@ fn main() -> Result<()> {
             .with_context(|| format!("Could not write {}", out_path.display()))?;
     }
 
-    let all_mods = settings.all_mods().len();
+    let all_mods = settings
+        .all_mods_with_workshop(paths.workshop_dir.as_deref())?
+        .len();
 
     if args.json {
         let summary = serde_json::json!({

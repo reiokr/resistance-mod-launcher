@@ -10,7 +10,7 @@ use crate::auto_category::{normalize_name, normalize_tag};
 use crate::state::CategoryFeedback;
 use crate::workshop::WorkshopCache;
 use std::collections::{HashMap, HashSet};
-use xcom2_launcher_core::{AmlMod, AmlRoot};
+use xcom2_launcher_core::AmlMod;
 
 const MIN_EXAMPLES: usize = 5;
 const MIN_CATEGORIES: usize = 2;
@@ -117,15 +117,16 @@ pub fn features(entry: &AmlMod, cache: &WorkshopCache) -> Vec<(String, usize)> {
 
 pub fn train(
     feedback: &HashMap<String, CategoryFeedback>,
-    settings: &AmlRoot,
+    all_mods: &[AmlMod],
     cache: &WorkshopCache,
 ) -> Option<Model> {
     if feedback.len() < MIN_EXAMPLES {
         return None;
     }
-    let all = settings.all_mods();
-    let by_id: HashMap<&str, &AmlMod> =
-        all.iter().map(|entry| (entry.id.as_str(), entry)).collect();
+    let by_id: HashMap<&str, &AmlMod> = all_mods
+        .iter()
+        .map(|entry| (entry.id.as_str(), entry))
+        .collect();
 
     let mut model = Model::default();
     let mut categories = HashSet::new();
@@ -217,7 +218,7 @@ impl Model {
 mod tests {
     use super::*;
     use crate::workshop::WorkshopDetails;
-    use xcom2_launcher_core::{AmlGroup, AmlMods};
+    use xcom2_launcher_core::{AmlGroup, AmlMods, AmlRoot};
 
     #[test]
     fn stopwords_and_description_tokens() {
@@ -233,7 +234,7 @@ mod tests {
         let feedback = HashMap::new();
         let settings = AmlRoot::default();
         let cache = WorkshopCache::default();
-        assert!(train(&feedback, &settings, &cache).is_none());
+        assert!(train(&feedback, &[], &cache).is_none());
     }
 
     fn settings_with(mods: Vec<AmlMod>) -> AmlRoot {
@@ -306,7 +307,8 @@ mod tests {
             );
         }
 
-        let model = train(&feedback, &settings, &cache).expect("model");
+        let all = settings.all_mods();
+        let model = train(&feedback, &all, &cache).expect("model");
         assert_eq!(model.training_examples, 6);
         assert_eq!(model.training_categories, 2);
 

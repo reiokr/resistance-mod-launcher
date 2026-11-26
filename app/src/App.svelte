@@ -51,7 +51,7 @@
   let readmeLoading = $state(false);
   let readmeError = $state("");
   let aboutOpen = $state(false);
-  let appVersion = $state("0.1.0");
+  let appVersion = $state("0.1.1");
 
   onMount(() => {
     document.documentElement.lang = lang;
@@ -292,7 +292,10 @@
 
   async function refreshWorkshop() {
     busy = true;
-    busyText = t("Värskendan Workshopi andmeid (590 modi)…");
+    const workshopCount = (snapshot?.mods ?? []).filter((mod) => mod.workshop_id).length;
+    busyText = t("Värskendan Workshopi andmeid ({count} modi)…", {
+      count: workshopCount,
+    });
     error = "";
     message = "";
     try {

@@ -296,7 +296,7 @@ pub fn refresh() -> Result<WorkshopRefresh> {
     let settings = AmlRoot::load(&settings_path)?;
 
     let mut ids: Vec<u64> = settings
-        .all_mods()
+        .all_mods_with_workshop(paths.workshop_dir.as_deref())?
         .into_iter()
         .filter_map(|entry| entry.workshop_id.filter(|id| *id > 0))
         .collect::<HashSet<_>>()

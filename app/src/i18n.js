@@ -201,8 +201,8 @@ export const en = {
   "XCOM 2 käivitatud (PID {pid}): {exe}{suffix}":
     "XCOM 2 launched (PID {pid}): {exe}{suffix}",
   "(prelaunch hoiatas)": "(prelaunch warned)",
-  "Värskendan Workshopi andmeid (590 modi)…":
-    "Refreshing Workshop data (590 mods)…",
+  "Värskendan Workshopi andmeid ({count} modi)…":
+    "Refreshing Workshop data ({count} mods)…",
   "Workshop: {fetched}/{total} uuendatud": "Workshop: {fetched}/{total} refreshed",
   " · {failed} ebaõnnestus": " · {failed} failed",
   "Lisan kategooria…": "Adding category…",

@@ -280,7 +280,7 @@ pub fn scan_with(active_ids_override: Option<Vec<String>>) -> Result<Diagnostics
         .clone()
         .context("AML settings.json was not found")?;
     let settings = AmlRoot::load(&settings_path)?;
-    let all = settings.all_mods();
+    let all = settings.all_mods_with_workshop(paths.workshop_dir.as_deref())?;
 
     let config_dir = paths
         .wotc_config

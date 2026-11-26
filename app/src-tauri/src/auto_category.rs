@@ -737,8 +737,8 @@ fn build_plan(
         .clone()
         .context("AML settings.json was not found")?;
     let settings = AmlRoot::load(&settings_path)?;
-    let all = settings.all_mods();
-    let model = crate::category_learning::train(&state.category_feedback, &settings, cache);
+    let all = settings.all_mods_with_workshop(paths.workshop_dir.as_deref())?;
+    let model = crate::category_learning::train(&state.category_feedback, &all, cache);
 
     let mut assignments = Vec::new();
     let mut unsorted = 0usize;

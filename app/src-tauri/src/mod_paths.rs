@@ -31,7 +31,7 @@ pub fn mod_dir(mod_id: &str) -> Result<PathBuf> {
         .context("AML settings.json was not found")?;
     let settings = AmlRoot::load(&settings_path)?;
     let entry = settings
-        .all_mods()
+        .all_mods_with_workshop(paths.workshop_dir.as_deref())?
         .into_iter()
         .find(|entry| entry.id == mod_id)
         .with_context(|| format!("Mod not found: {mod_id}"))?;
