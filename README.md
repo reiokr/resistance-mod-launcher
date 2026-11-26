@@ -151,7 +151,8 @@ The library is UI-free so the Tauri backend can call it directly.
 GPL-3.0-only. This is an independent Rust/Svelte reimplementation; it does not
 contain AML source code or assets. AML is GPL-3.0; its file formats and behavior
 were used for interoperability. See `NOTICE` for attribution and the
-trademark disclaimer.
+trademark disclaimer. AML project:
+<https://github.com/X2CommunityCore/xcom2-launcher>.
 
 This project is unofficial and is not affiliated with or endorsed by Firaxis
 Games, 2K, Take-Two Interactive, Valve, or the Alternative Mod Launcher (AML)
