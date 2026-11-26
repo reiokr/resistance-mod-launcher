@@ -1,5 +1,8 @@
 # Resistance Mod Launcher (core + Tauri)
 
+[![CI](https://github.com/reiokr/resistance-mod-launcher/actions/workflows/ci.yml/badge.svg)](https://github.com/reiokr/resistance-mod-launcher/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/reiokr/resistance-mod-launcher)](https://github.com/reiokr/resistance-mod-launcher/releases)
+
 Native Linux core and desktop app for XCOM 2 mod management. This is an
 independent Tauri 2 + Svelte 5 implementation that runs natively on Linux and
 manages the Windows/Proton install without Wine.
