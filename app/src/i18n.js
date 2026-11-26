@@ -7,6 +7,8 @@ export const en = {
   "Muu / salvestamata": "Other / unsaved",
   "Muudatused ei ole profiili salvestatud":
     "Changes are not saved to the profile",
+  "Profiilis on salvestamata muudatusi. Vaheta profiili ja kaota need?":
+    "The profile has unsaved changes. Switch profiles and discard them?",
 
   "Kontrollin profiili konflikte…": "Checking profile conflicts…",
   "Kontroll: {conflicts} konflikti, {missing} puudulikku sõltuvust.":

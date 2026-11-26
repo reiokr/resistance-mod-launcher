@@ -779,10 +779,31 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
       profileBaseline = null;
       return;
     }
-    if (name !== currentProfile) await applyProfile(name);
+    if (name === currentProfile) return;
+    if (profileDirty) {
+      const ok = window.confirm(
+        t("Profiilis on salvestamata muudatusi. Vaheta profiili ja kaota need?")
+      );
+      if (!ok) {
+        event.target.value = currentProfile ?? "";
+        return;
+      }
+    }
+    await applyProfile(name, true);
   }
 
-  async function applyProfile(name) {
+  async function applyProfile(name, skipConfirm = false) {
+    if (
+      !skipConfirm &&
+      currentProfile &&
+      profileDirty &&
+      name !== currentProfile &&
+      !window.confirm(
+        t("Profiilis on salvestamata muudatusi. Vaheta profiili ja kaota need?")
+      )
+    ) {
+      return;
+    }
     busy = true;
     busyText = t("Rakendan profiili…");
     try {
