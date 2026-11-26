@@ -3,6 +3,12 @@
 
 export const en = {
 
+  "Salvesta profiil": "Save profile",
+  "Salvesta praegune nimekiri selle profiili sisse":
+    "Save the current list into this profile",
+  "Modi lisamiseks profiili: vali profiil ülaribast, lülita mod Modid-tabis sisse ja vajuta „Salvesta profiil”. Pärast seda vajuta „Salvesta”, et nimekiri mängu configusse läheks.":
+    "To add a mod to a profile: select the profile in the top bar, enable the mod in the Mods tab, then press “Save profile”. After that press “Save” to write the list to the game config.",
+
   "Profiil / modpack": "Profile / modpack",
   "Muu / salvestamata": "Other / unsaved",
   "Muudatused ei ole profiili salvestatud":

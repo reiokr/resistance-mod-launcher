@@ -77,7 +77,7 @@
   let readmeLoading = $state(false);
   let readmeError = $state("");
   let aboutOpen = $state(false);
-  let appVersion = $state("0.2.2");
+  let appVersion = $state("0.2.3");
 
   onMount(() => {
     document.documentElement.lang = lang;
@@ -748,6 +748,31 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     }
   }
 
+  async function saveCurrentProfile() {
+    if (!currentProfile || busy) return;
+    const name = currentProfile;
+    const savedIds = [...activeOrder];
+    busy = true;
+    busyText = t("Salvestan profiili…");
+    try {
+      await invoke("save_profile", { name, active_ids: savedIds });
+      profileBaseline = [...savedIds];
+      if (snapshot) {
+        const profile = snapshot.profiles.find((entry) => entry.name === name);
+        if (profile) {
+          profile.count = savedIds.length;
+          profile.updated = Math.floor(Date.now() / 1000);
+        }
+      }
+      message = t("Profiil salvestatud: {name}", { name });
+    } catch (err) {
+      error = String(err);
+    } finally {
+      busy = false;
+      busyText = "";
+    }
+  }
+
   async function saveProfile() {
     const name = profileName.trim();
     if (!name) return;
@@ -1098,6 +1123,14 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
           >●</span>
         {/if}
       </div>
+      {#if currentProfile}
+        <button
+          class="ghost"
+          onclick={saveCurrentProfile}
+          disabled={loading || busy}
+          title={t("Salvesta praegune nimekiri selle profiili sisse")}
+        >{t("Salvesta profiil")}</button>
+      {/if}
       <button
         class="ghost lang"
         onclick={toggleLanguage}
@@ -1530,7 +1563,7 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
             {/if}
           </div>
           <p class="manager-note">
-            {t("Profiil salvestab aktiivsete modide järjekorra. Pärast Rakenda vajuta Salvesta, et see mängu XComModOptions.ini-sse kirjutada.")}
+            {t("Modi lisamiseks profiili: vali profiil ülaribast, lülita mod Modid-tabis sisse ja vajuta „Salvesta profiil”. Pärast seda vajuta „Salvesta”, et nimekiri mängu configusse läheks.")}
           </p>
         </div>
       {:else}
