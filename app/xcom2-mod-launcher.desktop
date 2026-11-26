@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Resistance Mod Launcher
+GenericName=Unofficial XCOM 2 mod manager
+Comment=Native Linux mod manager for XCOM 2: War of the Chosen (Proton)
+Exec=xcom2-mod-launcher
+Icon=xcom2-mod-launcher
+Terminal=false
+Categories=Game;Utility;
+Keywords=xcom;xcom2;mod;launcher;mods;proton;wotc;
+StartupNotify=true

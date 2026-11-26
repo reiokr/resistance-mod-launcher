@@ -1,0 +1,25 @@
+[package]
+name = "xcom2-mod-launcher"
+version = "0.1.0"
+description = "Native Linux mod launcher for XCOM 2"
+edition = "2024"
+license = "GPL-3.0-only"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+anyhow = "1"
+encoding_rs = "0.8"
+rayon = "1"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }
+ureq = "2"
+walkdir = "2"
+xcom2-launcher-core = { path = "../.." }
+
+[profile.release]
+strip = true
+lto = "thin"

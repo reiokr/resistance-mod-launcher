@@ -1,0 +1,63 @@
+Resistance Mod Launcher
+Copyright (C) 2026 the Resistance Mod Launcher contributors
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, version 3 only.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+this program. If not, see <https://www.gnu.org/licenses/>.
+
+--------------------------------------------------------------------------------
+Attribution and interoperability
+--------------------------------------------------------------------------------
+
+This project is an independent reimplementation of a mod launcher for
+XCOM 2: War of the Chosen on Linux. It does not contain source code, binaries,
+artwork, icons, translations, or other assets from the Alternative Mod Launcher
+(AML).
+
+AML is a separate project by the X2CommunityCore contributors, licensed under
+GPL-3.0:
+  https://github.com/X2CommunityCore/xcom2-launcher
+
+AML's file formats and observable behavior were used for interoperability:
+  - reading AML's settings.json;
+  - reading and writing XCOM 2's XComModOptions.ini;
+  - reproducing AML-compatible conflict and dependency checks;
+  - reading mod ReadMe/Config files.
+
+No game files, Workshop mods, Steam content, or third-party launcher assets are
+distributed with this project.
+
+--------------------------------------------------------------------------------
+Trademarks
+--------------------------------------------------------------------------------
+
+This project is unofficial and is not affiliated with or endorsed by Firaxis
+Games, 2K, Take-Two Interactive, Valve Corporation, or the Alternative Mod
+Launcher project.
+
+XCOM, XCOM 2, XCOM 2: War of the Chosen and related names and logos are
+trademarks or registered trademarks of their respective owners. Steam and the
+Steam logo are trademarks of Valve Corporation. All other trademarks are the
+property of their respective owners.
+
+The product name and icon are original to this project and are not copied from
+XCOM 2, AML, or Steam.
+
+--------------------------------------------------------------------------------
+Third-party software
+--------------------------------------------------------------------------------
+
+This project uses open-source libraries (Tauri, Svelte, Rust crates, and
+others). Each dependency remains under its own license; see Cargo.lock,
+app/package.json and the respective upstream projects for details.
+
+Workshop metadata is fetched read-only through Valve's public Steam Web API.
+Use of that data is subject to Valve's applicable terms. This project does not
+subscribe to, download, or redistribute Workshop content.
