@@ -4,7 +4,7 @@
 //! limited to the mod's own Config tree, preserve the original text encoding
 //! and line endings, and create a byte-for-byte backup in the app data dir.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use encoding_rs::WINDOWS_1252;
 use serde::Serialize;
 use std::fs;
@@ -218,7 +218,9 @@ pub fn save(mod_id: &str, relative: &str, content: &str) -> Result<ConfigSaveRes
     if encoding == TextEncoding::Windows1252 {
         let (_, _, had_errors) = WINDOWS_1252.encode(&final_text);
         if had_errors {
-            bail!("This file is Windows-1252 and the text contains characters it cannot represent.");
+            bail!(
+                "This file is Windows-1252 and the text contains characters it cannot represent."
+            );
         }
     }
     let encoded = encode(&final_text, encoding);
@@ -432,10 +434,8 @@ mod tests {
 
     #[test]
     fn write_replaces_file_and_keeps_backup() {
-        let base = std::env::temp_dir().join(format!(
-            "xcom2-config-editor-test-{}",
-            std::process::id()
-        ));
+        let base =
+            std::env::temp_dir().join(format!("xcom2-config-editor-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&base);
         fs::create_dir_all(&base).unwrap();
         let file = base.join("XComGame.ini");
@@ -443,12 +443,22 @@ mod tests {
         fs::write(&file, b"old contents\n").unwrap();
         let permissions = fs::metadata(&file).unwrap().permissions();
 
-        write_replacing(&file, b"new contents\n", b"old contents\n", permissions, &backup)
-            .unwrap();
+        write_replacing(
+            &file,
+            b"new contents\n",
+            b"old contents\n",
+            permissions,
+            &backup,
+        )
+        .unwrap();
 
         assert_eq!(fs::read(&file).unwrap(), b"new contents\n");
         assert_eq!(fs::read(&backup).unwrap(), b"old contents\n");
-        assert!(!file.with_extension(format!("ini.tmp-{}", std::process::id())).exists());
+        assert!(
+            !file
+                .with_extension(format!("ini.tmp-{}", std::process::id()))
+                .exists()
+        );
         fs::remove_dir_all(&base).unwrap();
     }
 }

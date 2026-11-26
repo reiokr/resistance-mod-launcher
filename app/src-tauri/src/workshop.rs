@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
-use xcom2_launcher_core::{discover_paths, AmlRoot, SteamPaths};
+use xcom2_launcher_core::{AmlRoot, SteamPaths, discover_paths};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct WorkshopDetails {
@@ -149,8 +149,8 @@ pub fn local_times(paths: &SteamPaths) -> Result<HashMap<u64, i64>> {
     let Some(path) = acf_path(paths) else {
         return Ok(result);
     };
-    let text = fs::read_to_string(&path)
-        .with_context(|| format!("Could not read {}", path.display()))?;
+    let text =
+        fs::read_to_string(&path).with_context(|| format!("Could not read {}", path.display()))?;
     let re = Regex::new(
         r#""(\d+)"\s*\{\s*"size"\s*"\d+"\s*"timeupdated"\s*"(\d+)"\s*"manifest"\s*"\d+"\s*\}"#,
     )?;
@@ -177,9 +177,7 @@ fn api_details(item: ApiItem) -> Option<WorkshopDetails> {
         return None;
     }
     let workshop_id = item.publishedfileid.parse::<u64>().ok()?;
-    let file_size = item
-        .file_size
-        .and_then(|value| value.parse::<u64>().ok());
+    let file_size = item.file_size.and_then(|value| value.parse::<u64>().ok());
     let mut seen = HashSet::new();
     let tags = item
         .tags
@@ -270,9 +268,7 @@ pub fn ensure_cached(ids: &[u64]) -> Result<WorkshopEnsure> {
             Ok(details) => {
                 let count = details.len();
                 for details in details {
-                    cache
-                        .items
-                        .insert(details.workshop_id.to_string(), details);
+                    cache.items.insert(details.workshop_id.to_string(), details);
                     fetched += 1;
                 }
                 failed += chunk.len().saturating_sub(count);
@@ -325,9 +321,7 @@ pub fn refresh() -> Result<WorkshopRefresh> {
             Ok(details) => {
                 let count = details.len();
                 for details in details {
-                    cache
-                        .items
-                        .insert(details.workshop_id.to_string(), details);
+                    cache.items.insert(details.workshop_id.to_string(), details);
                     fetched += 1;
                 }
                 failed += chunk.len().saturating_sub(count);

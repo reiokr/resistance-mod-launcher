@@ -1,7 +1,7 @@
 //! ReadMe viewer backend. Looks for `ReadMe.txt` / `ReadMe.md` in the mod
 //! root (case-insensitive) and returns decoded text for the UI.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use encoding_rs::WINDOWS_1252;
 use serde::Serialize;
 use std::fs;

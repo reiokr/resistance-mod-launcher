@@ -4,7 +4,7 @@
 //! the source of truth for the active list, and writes the config with a
 //! backup + atomic replace.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -12,9 +12,9 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use xcom2_launcher_core::{
-    build_active_mods, default_mod_options_timestamp, discover_paths, map_windows_path,
-    parse_active_mods, parse_ini_version, render_mod_options, write_mod_options, AmlMod, AmlRoot,
-    SteamPaths, APP_ID,
+    APP_ID, AmlMod, AmlRoot, SteamPaths, build_active_mods, default_mod_options_timestamp,
+    discover_paths, map_windows_path, parse_active_mods, parse_ini_version, render_mod_options,
+    write_mod_options,
 };
 
 mod auto_category;
@@ -147,8 +147,6 @@ fn steam_running() -> bool {
         .unwrap_or(false)
 }
 
-
-
 fn aml_running() -> bool {
     pgrep("launcher.exe")
 }
@@ -273,7 +271,10 @@ fn load_snapshot() -> Result<AppSnapshot> {
         .iter()
         .filter(|id| !known.contains(id.as_str()))
         .count();
-    let missing = mods.iter().filter(|entry| entry.active && entry.missing).count();
+    let missing = mods
+        .iter()
+        .filter(|entry| entry.active && entry.missing)
+        .count();
     let updates = mods.iter().filter(|entry| entry.update_available).count();
     let mut category_counts: HashMap<String, usize> = HashMap::new();
     for entry in &mods {
@@ -394,9 +395,7 @@ fn save_state_impl(active_ids: Vec<String>) -> Result<SaveResult> {
             .lines()
             .any(|line| line.trim_start().starts_with("ModRootDirs="))
         {
-            warnings.push(
-                "XComEngine.ini is missing ModRootDirs — mods may not load".to_string(),
-            );
+            warnings.push("XComEngine.ini is missing ModRootDirs — mods may not load".to_string());
         }
     }
 
@@ -585,7 +584,9 @@ async fn refresh_workshop() -> Result<workshop::WorkshopRefresh, String> {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-async fn scan_diagnostics(active_ids: Option<Vec<String>>) -> Result<diagnostics::DiagnosticsReport, String> {
+async fn scan_diagnostics(
+    active_ids: Option<Vec<String>>,
+) -> Result<diagnostics::DiagnosticsReport, String> {
     tauri::async_runtime::spawn_blocking(move || diagnostics::scan_with(active_ids))
         .await
         .map_err(|err| format!("Diagnostics task failed: {err}"))?
@@ -789,7 +790,10 @@ fn main() {
         return;
     }
 
-    if args.iter().any(|arg| arg == "--headless-auto-categories-apply") {
+    if args
+        .iter()
+        .any(|arg| arg == "--headless-auto-categories-apply")
+    {
         match auto_category::apply(false) {
             Ok(result) => println!("{result:#?}"),
             Err(err) => {

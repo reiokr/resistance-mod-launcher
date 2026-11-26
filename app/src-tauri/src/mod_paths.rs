@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result};
 use std::path::PathBuf;
-use xcom2_launcher_core::{discover_paths, map_windows_path, AmlRoot, AmlMod, SteamPaths};
+use xcom2_launcher_core::{AmlMod, AmlRoot, SteamPaths, discover_paths, map_windows_path};
 
 /// Resolve a mod's on-disk directory: Workshop content first, then AML's
 /// recorded Windows path mapped through the Proton prefix.

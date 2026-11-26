@@ -73,7 +73,10 @@ pub fn discover_paths() -> Result<SteamPaths> {
     let mut candidates: Vec<(u8, PathBuf, PathBuf, PathBuf, PathBuf)> = Vec::new();
     for library in &libraries {
         let game_dir = game_install_dir(library);
-        let prefix = library.join("steamapps/compatdata").join(APP_ID.to_string()).join("pfx");
+        let prefix = library
+            .join("steamapps/compatdata")
+            .join(APP_ID.to_string())
+            .join("pfx");
         let workshop = library
             .join("steamapps/workshop/content")
             .join(APP_ID.to_string());
@@ -103,9 +106,17 @@ pub fn discover_paths() -> Result<SteamPaths> {
 
     if let Some((_, library, game_dir, prefix, workshop)) = candidates.into_iter().next() {
         paths.library = Some(library);
-        paths.game_dir = if game_dir.is_dir() { Some(game_dir) } else { None };
+        paths.game_dir = if game_dir.is_dir() {
+            Some(game_dir)
+        } else {
+            None
+        };
         paths.prefix = if prefix.is_dir() { Some(prefix) } else { None };
-        paths.workshop_dir = if workshop.is_dir() { Some(workshop) } else { None };
+        paths.workshop_dir = if workshop.is_dir() {
+            Some(workshop)
+        } else {
+            None
+        };
     }
 
     if let Some(game_dir) = &paths.game_dir {
@@ -429,8 +440,8 @@ pub fn scan_local_mods(mod_dirs: &[PathBuf]) -> Result<ModIndex> {
 }
 
 pub fn parse_xcomod(path: &Path) -> Result<ModFile> {
-    let bytes = fs::read(path)
-        .with_context(|| format!("Could not read .XComMod: {}", path.display()))?;
+    let bytes =
+        fs::read(path).with_context(|| format!("Could not read .XComMod: {}", path.display()))?;
     let text = String::from_utf8_lossy(&bytes);
     let internal_id = path
         .file_stem()
@@ -521,7 +532,9 @@ pub fn map_windows_path(value: &str, prefix: Option<&Path>) -> Option<PathBuf> {
     }
 
     let drive = (bytes[0] as char).to_ascii_lowercase();
-    let rest = value[2..].trim_start_matches(['\\', '/']).replace('\\', "/");
+    let rest = value[2..]
+        .trim_start_matches(['\\', '/'])
+        .replace('\\', "/");
     let prefix = prefix?;
     let link = prefix.join("dosdevices").join(format!("{drive}:"));
 
@@ -626,7 +639,8 @@ pub fn build_active_mods(
 ) -> Result<Vec<ActiveMod>> {
     let index = build_mod_index(paths)?;
     let all = settings.all_mods();
-    let by_id: HashMap<&str, &AmlMod> = all.iter().map(|entry| (entry.id.as_str(), entry)).collect();
+    let by_id: HashMap<&str, &AmlMod> =
+        all.iter().map(|entry| (entry.id.as_str(), entry)).collect();
 
     let mut active = Vec::with_capacity(ids.len());
     for (position, id) in ids.iter().enumerate() {
@@ -730,7 +744,9 @@ pub fn default_mod_options_timestamp(game_dir: &Path, wotc: bool) -> Result<Stri
             .join(WOTC_DEFAULT_DIR)
             .join("XComGame/Config/DefaultModOptions.ini")
     } else {
-        game_dir.join(VANILLA_DEFAULT_DIR).join("Config/DefaultModOptions.ini")
+        game_dir
+            .join(VANILLA_DEFAULT_DIR)
+            .join("Config/DefaultModOptions.ini")
     };
 
     let modified = fs::metadata(&default_file)
@@ -819,8 +835,7 @@ pub fn write_mod_options(
     let tmp = config_dir.join(format!(".XComModOptions.ini.tmp-{}", std::process::id()));
     fs::write(&tmp, content.as_bytes())
         .with_context(|| format!("Could not write temporary file {}", tmp.display()))?;
-    fs::rename(&tmp, &path)
-        .with_context(|| format!("Could not replace {}", path.display()))?;
+    fs::rename(&tmp, &path).with_context(|| format!("Could not replace {}", path.display()))?;
 
     Ok(WriteResult {
         path,
@@ -965,7 +980,8 @@ mod tests {
         let path = config_dir.join("XComModOptions.ini");
         fs::write(&path, "old\r\n").unwrap();
 
-        let new_content = "[Engine.XComModOptions]\r\nActiveMods=A\r\n\r\n[IniVersion]\r\n0=123.000000\r\n\r\n";
+        let new_content =
+            "[Engine.XComModOptions]\r\nActiveMods=A\r\n\r\n[IniVersion]\r\n0=123.000000\r\n\r\n";
         let result = write_mod_options(&config_dir, new_content, &backup_root).unwrap();
         assert!(!result.unchanged);
         assert_eq!(result.active_count, 1);

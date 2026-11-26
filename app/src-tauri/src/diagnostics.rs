@@ -17,9 +17,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use walkdir::WalkDir;
-use xcom2_launcher_core::{
-    discover_paths, parse_active_mods, AmlMod, AmlRoot, SteamPaths,
-};
+use xcom2_launcher_core::{AmlMod, AmlRoot, SteamPaths, discover_paths, parse_active_mods};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MissingDependency {
@@ -127,19 +125,15 @@ fn scan_overrides(entry: &AmlMod, paths: &SteamPaths) -> Vec<RawOverride> {
         return Vec::new();
     };
 
-    let class_re = Regex::new(
-        r#"^[+]?ModClassOverrides=\(BaseGameClass="([^"]+)",ModClass="([^"]+)"\)"#,
-    )
-    .expect("class override regex");
+    let class_re =
+        Regex::new(r#"^[+]?ModClassOverrides=\(BaseGameClass="([^"]+)",ModClass="([^"]+)"\)"#)
+            .expect("class override regex");
     let whitespace_re = Regex::new(r"\s+").expect("whitespace regex");
     let screen_re =
         Regex::new(r"(?i)^\s*ScreenClass\s*=\s*(?:class')?([a-z_]+)").expect("screen regex");
 
     let mod_id = entry.id.clone();
-    let mod_name = entry
-        .name
-        .clone()
-        .unwrap_or_else(|| entry.id.clone());
+    let mod_name = entry.name.clone().unwrap_or_else(|| entry.id.clone());
     let mut result = Vec::new();
 
     let config = mod_path.join("Config");
@@ -265,7 +259,11 @@ fn detect_conflicts(overrides: Vec<RawOverride>) -> (Vec<ConflictIssue>, usize) 
             overrides,
         });
     }
-    conflicts.sort_by(|a, b| a.base_class.to_lowercase().cmp(&b.base_class.to_lowercase()));
+    conflicts.sort_by(|a, b| {
+        a.base_class
+            .to_lowercase()
+            .cmp(&b.base_class.to_lowercase())
+    });
     (conflicts, conflict_mods.len())
 }
 

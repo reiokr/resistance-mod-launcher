@@ -9,8 +9,8 @@ use clap::Parser;
 use std::fs;
 use std::path::PathBuf;
 use xcom2_launcher_core::{
-    default_mod_options_timestamp, diff_order, discover_paths, parse_active_mods,
-    parse_ini_version, render_mod_options, resolve_active_mods, AmlRoot,
+    AmlRoot, default_mod_options_timestamp, diff_order, discover_paths, parse_active_mods,
+    parse_ini_version, render_mod_options, resolve_active_mods,
 };
 
 #[derive(Debug, Parser)]
@@ -134,8 +134,15 @@ fn main() -> Result<()> {
     println!("Game:            {}", display_opt(&paths.game_dir));
     println!("Proton prefix:   {}", display_opt(&paths.prefix));
     println!("Workshop:        {}", display_opt(&paths.workshop_dir));
-    println!("AML settings:    {} (mods: {all_mods})", settings_path.display());
-    println!("Current config:  {} (ActiveMods: {})", current_path.display(), current_ids.len());
+    println!(
+        "AML settings:    {} (mods: {all_mods})",
+        settings_path.display()
+    );
+    println!(
+        "Current config:  {} (ActiveMods: {})",
+        current_path.display(),
+        current_ids.len()
+    );
     println!(
         "Active resolved: {} (missing: {})",
         active.len(),
@@ -149,8 +156,14 @@ fn main() -> Result<()> {
             .collect();
         println!("  missing:       {}", names.join(", "));
     }
-    println!("IniVersion:      generated {timestamp}, current {}", current_version.as_deref().unwrap_or("<none>"));
-    println!("Order identical: {}", if diff.identical { "yes" } else { "no" });
+    println!(
+        "IniVersion:      generated {timestamp}, current {}",
+        current_version.as_deref().unwrap_or("<none>")
+    );
+    println!(
+        "Order identical: {}",
+        if diff.identical { "yes" } else { "no" }
+    );
     if let Some(index) = diff.first_mismatch {
         println!("  first mismatch at position {index}");
     }
@@ -173,7 +186,11 @@ fn main() -> Result<()> {
         // already printed
     } else {
         println!("Generated INI:   {}", out_path.display());
-        println!("Compare with:    diff -u <(grep '^ActiveMods=' '{}') <(grep '^ActiveMods=' '{}')", current_path.display(), out_path.display());
+        println!(
+            "Compare with:    diff -u <(grep '^ActiveMods=' '{}') <(grep '^ActiveMods=' '{}')",
+            current_path.display(),
+            out_path.display()
+        );
     }
 
     Ok(())

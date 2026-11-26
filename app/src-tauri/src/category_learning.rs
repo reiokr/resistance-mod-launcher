@@ -35,17 +35,16 @@ pub struct Model {
 }
 
 const STOPWORDS: &[&str] = &[
-    "a", "about", "add", "adds", "after", "all", "also", "an", "and", "any", "are",
-    "as", "at", "be", "been", "before", "being", "but", "by", "can", "could", "do",
-    "does", "doesn", "don", "for", "from", "get", "got", "had", "has", "have", "how",
-    "i", "if", "in", "into", "is", "it", "its", "like", "make", "many", "more", "most",
-    "my", "new", "no", "not", "of", "on", "one", "only", "or", "other", "our", "out",
-    "over", "same", "should", "so", "some", "such", "t", "than", "that", "the",
-    "their", "them", "then", "there", "these", "they", "this", "those", "to", "too",
-    "up", "use", "used", "using", "very", "want", "was", "we", "were", "what", "when",
-    "which", "who", "will", "with", "would", "x2", "xcom", "you", "your", "wotc",
-    "war", "chosen", "chosen's", "chosen.", "mod", "mods", "modding", "game",
-    "gameplay", "version", "works", "work", "working", "adds,", "adds.", "adding",
+    "a", "about", "add", "adds", "after", "all", "also", "an", "and", "any", "are", "as", "at",
+    "be", "been", "before", "being", "but", "by", "can", "could", "do", "does", "doesn", "don",
+    "for", "from", "get", "got", "had", "has", "have", "how", "i", "if", "in", "into", "is", "it",
+    "its", "like", "make", "many", "more", "most", "my", "new", "no", "not", "of", "on", "one",
+    "only", "or", "other", "our", "out", "over", "same", "should", "so", "some", "such", "t",
+    "than", "that", "the", "their", "them", "then", "there", "these", "they", "this", "those",
+    "to", "too", "up", "use", "used", "using", "very", "want", "was", "we", "were", "what", "when",
+    "which", "who", "will", "with", "would", "x2", "xcom", "you", "your", "wotc", "war", "chosen",
+    "chosen's", "chosen.", "mod", "mods", "modding", "game", "gameplay", "version", "works",
+    "work", "working", "adds,", "adds.", "adding",
 ];
 
 fn is_stopword(token: &str) -> bool {
@@ -62,10 +61,7 @@ fn description_tokens(text: &str) -> Vec<String> {
                 current.push(lower);
             }
         } else if !current.is_empty() {
-            if current.len() >= 4
-                && !is_stopword(&current)
-                && seen.insert(current.clone())
-            {
+            if current.len() >= 4 && !is_stopword(&current) && seen.insert(current.clone()) {
                 result.push(current.clone());
             }
             current.clear();
@@ -128,10 +124,8 @@ pub fn train(
         return None;
     }
     let all = settings.all_mods();
-    let by_id: HashMap<&str, &AmlMod> = all
-        .iter()
-        .map(|entry| (entry.id.as_str(), entry))
-        .collect();
+    let by_id: HashMap<&str, &AmlMod> =
+        all.iter().map(|entry| (entry.id.as_str(), entry)).collect();
 
     let mut model = Model::default();
     let mut categories = HashSet::new();
@@ -151,7 +145,10 @@ pub fn train(
         model.total_docs += 1;
         *model.doc_counts.entry(category.to_string()).or_insert(0) += 1;
         categories.insert(category.to_string());
-        let category_counts = model.feature_counts.entry(category.to_string()).or_default();
+        let category_counts = model
+            .feature_counts
+            .entry(category.to_string())
+            .or_default();
         for (feature, weight) in features {
             *category_counts.entry(feature.clone()).or_insert(0) += weight;
             *model
@@ -191,8 +188,7 @@ impl Model {
                     .and_then(|map| map.get(feature))
                     .copied()
                     .unwrap_or(0) as f64;
-                log_likelihood +=
-                    *weight as f64 * ((count + 1.0) / (total + vocab)).ln();
+                log_likelihood += *weight as f64 * ((count + 1.0) / (total + vocab)).ln();
             }
             scores.push((category.clone(), prior + log_likelihood));
         }
@@ -206,9 +202,7 @@ impl Model {
             .into_iter()
             .map(|(category, score)| (category, (score - max).exp() / sum))
             .collect();
-        probabilities.sort_by(|a, b| {
-            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
-        });
+        probabilities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         let (category, probability) = probabilities.first()?.clone();
         let second = probabilities.get(1).map(|(_, value)| *value).unwrap_or(0.0);

@@ -3,7 +3,7 @@
 //! This is deliberately separate from the game config. Categories/profiles
 //! are a UI convenience; the active mod list/order remains XComModOptions.ini.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -100,7 +100,11 @@ fn now() -> i64 {
 }
 
 fn ensure_category(state: &mut PersistedState, name: &str) -> bool {
-    if state.categories.iter().any(|category| category.name == name) {
+    if state
+        .categories
+        .iter()
+        .any(|category| category.name == name)
+    {
         return false;
     }
     let index = next_index(state);
@@ -124,7 +128,8 @@ pub fn ensure_from_aml(state: &mut PersistedState, settings: &AmlRoot) -> bool {
                 collapsed: false,
             });
             for entry in &group.entries {
-                state.mod_categories
+                state
+                    .mod_categories
                     .entry(entry.id.clone())
                     .or_insert_with(|| name.clone());
             }
@@ -148,9 +153,7 @@ pub fn ensure_from_aml(state: &mut PersistedState, settings: &AmlRoot) -> bool {
         if state.mod_categories.contains_key(&entry.id) {
             continue;
         }
-        let category = entry
-            .category
-            .unwrap_or_else(|| "Unsorted".to_string());
+        let category = entry.category.unwrap_or_else(|| "Unsorted".to_string());
         ensure_category(state, &category);
         state.mod_categories.insert(entry.id, category);
         changed = true;
@@ -159,7 +162,10 @@ pub fn ensure_from_aml(state: &mut PersistedState, settings: &AmlRoot) -> bool {
     changed
 }
 
-pub fn category_views(state: &PersistedState, categories: &HashMap<String, usize>) -> Vec<CategoryView> {
+pub fn category_views(
+    state: &PersistedState,
+    categories: &HashMap<String, usize>,
+) -> Vec<CategoryView> {
     let mut views: Vec<CategoryView> = state
         .categories
         .iter()
@@ -234,7 +240,11 @@ pub fn create_category(state: &mut PersistedState, name: &str) -> Result<()> {
     if name.is_empty() {
         bail!("Category name cannot be empty.");
     }
-    if state.categories.iter().any(|category| category.name == name) {
+    if state
+        .categories
+        .iter()
+        .any(|category| category.name == name)
+    {
         bail!("Category already exists: {name}");
     }
     let index = next_index(state);
@@ -316,7 +326,11 @@ pub fn save_profile(state: &mut PersistedState, name: &str, active_ids: Vec<Stri
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs() as i64)
         .unwrap_or(0);
-    if let Some(profile) = state.profiles.iter_mut().find(|profile| profile.name == name) {
+    if let Some(profile) = state
+        .profiles
+        .iter_mut()
+        .find(|profile| profile.name == name)
+    {
         profile.active_ids = active_ids;
         profile.updated = updated;
     } else {
@@ -356,20 +370,32 @@ mod tests {
         let mut state = PersistedState::default();
         set_mod_category_manual(&mut state, "ModA", "Weapons & Items").unwrap();
         assert_eq!(
-            state.category_feedback.get("ModA").map(|feedback| feedback.category.as_str()),
+            state
+                .category_feedback
+                .get("ModA")
+                .map(|feedback| feedback.category.as_str()),
             Some("Weapons & Items")
         );
 
         rename_category(&mut state, "Weapons & Items", "Gear").unwrap();
         assert_eq!(
-            state.category_feedback.get("ModA").map(|feedback| feedback.category.as_str()),
+            state
+                .category_feedback
+                .get("ModA")
+                .map(|feedback| feedback.category.as_str()),
             Some("Gear")
         );
-        assert_eq!(state.mod_categories.get("ModA").map(String::as_str), Some("Gear"));
+        assert_eq!(
+            state.mod_categories.get("ModA").map(String::as_str),
+            Some("Gear")
+        );
 
         delete_category(&mut state, "Gear").unwrap();
         assert!(!state.category_feedback.contains_key("ModA"));
-        assert_eq!(state.mod_categories.get("ModA").map(String::as_str), Some("Unsorted"));
+        assert_eq!(
+            state.mod_categories.get("ModA").map(String::as_str),
+            Some("Unsorted")
+        );
     }
 
     #[test]
