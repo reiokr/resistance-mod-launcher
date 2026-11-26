@@ -189,6 +189,8 @@ cargo run -- --headless-diagnostics
   discards the buffer and re-reads from disk.
 - Details pane **Ava ReadMe**: shows the mod's `ReadMe.txt`/`ReadMe.md` or a
   clear "no ReadMe" message.
+- **Info** in the footer: version, GPL-3.0-only license, source link, and the
+  unofficial/trademark disclaimer.
 - **Värskenda Workshopi**: fetches/refreshes Workshop metadata for all mods
   with a Workshop ID (about 590 in the current setup). Network required; the
   result is cached.
