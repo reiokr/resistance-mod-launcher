@@ -4,7 +4,7 @@
 //! local download timestamps come from appworkshop_268500.acf. No subscribe,
 //! download, or write to Steam is performed here.
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -24,6 +24,8 @@ pub struct WorkshopDetails {
     pub preview_url: Option<String>,
     pub file_size: Option<u64>,
     pub subscriptions: Option<i64>,
+    #[serde(default)]
+    pub consumer_app_id: Option<u32>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -44,6 +46,29 @@ pub struct WorkshopEnsure {
     pub requested: usize,
     pub fetched: usize,
     pub failed: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CollectionItem {
+    pub workshop_id: u64,
+    pub title: Option<String>,
+    pub installed: bool,
+    pub mod_id: Option<String>,
+    pub status: String,
+    pub steam_url: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CollectionPreview {
+    pub id: u64,
+    pub title: String,
+    pub description: String,
+    pub url: String,
+    pub total: usize,
+    pub installed: usize,
+    pub missing: usize,
+    pub other_game: usize,
+    pub items: Vec<CollectionItem>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -85,6 +110,37 @@ struct ApiItem {
     file_size: Option<String>,
     #[serde(default)]
     subscriptions: Option<i64>,
+    #[serde(default)]
+    consumer_app_id: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CollectionEnvelope {
+    response: CollectionResponse,
+}
+
+#[derive(Debug, Deserialize)]
+struct CollectionResponse {
+    #[serde(default)]
+    collectiondetails: Vec<ApiCollection>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApiCollection {
+    #[serde(default)]
+    publishedfileid: String,
+    #[serde(default)]
+    result: Option<i32>,
+    #[serde(default)]
+    children: Vec<ApiCollectionChild>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApiCollectionChild {
+    #[serde(default)]
+    publishedfileid: String,
+    #[serde(default)]
+    filetype: i32,
 }
 
 pub fn cache_path() -> Result<PathBuf> {
@@ -195,6 +251,7 @@ fn api_details(item: ApiItem) -> Option<WorkshopDetails> {
         preview_url: item.preview_url,
         file_size,
         subscriptions: item.subscriptions,
+        consumer_app_id: item.consumer_app_id,
     })
 }
 
@@ -284,6 +341,147 @@ pub fn ensure_cached(ids: &[u64]) -> Result<WorkshopEnsure> {
         requested: requested.len(),
         fetched,
         failed,
+    })
+}
+
+fn fetch_collection_children(agent: &ureq::Agent, id: u64) -> Result<Vec<ApiCollectionChild>> {
+    let body = format!("collectioncount=1&publishedfileids[0]={id}");
+    let response = agent
+        .post("https://api.steampowered.com/ISteamRemoteStorage/GetCollectionDetails/v1/")
+        .set("Content-Type", "application/x-www-form-urlencoded")
+        .send_string(&body)?;
+    let text = response
+        .into_string()
+        .context("Steam Workshop returned invalid UTF-8")?;
+    let envelope: CollectionEnvelope =
+        serde_json::from_str(&text).context("Could not parse Steam collection response")?;
+    let collection = envelope
+        .response
+        .collectiondetails
+        .into_iter()
+        .find(|collection| collection.publishedfileid == id.to_string())
+        .with_context(|| format!("Steam collection not found: {id}"))?;
+    if collection.result.unwrap_or(1) == 0 {
+        bail!("Steam collection is not available: {id}");
+    }
+    Ok(collection.children)
+}
+
+fn collect_collection_items(
+    agent: &ureq::Agent,
+    id: u64,
+    depth: usize,
+    seen: &mut HashSet<u64>,
+    items: &mut Vec<u64>,
+) -> Result<()> {
+    if depth > 6 {
+        bail!("Steam collection nesting is too deep.");
+    }
+    if items.len() >= 2000 {
+        bail!("Steam collection contains too many items.");
+    }
+    for child in fetch_collection_children(agent, id)? {
+        let Ok(child_id) = child.publishedfileid.parse::<u64>() else {
+            continue;
+        };
+        if !seen.insert(child_id) {
+            continue;
+        }
+        if child.filetype == 2 {
+            collect_collection_items(agent, child_id, depth + 1, seen, items)?;
+        } else {
+            items.push(child_id);
+        }
+    }
+    Ok(())
+}
+
+pub fn preview_collection(id: u64) -> Result<CollectionPreview> {
+    let agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(30))
+        .build();
+    let mut seen = HashSet::new();
+    seen.insert(id);
+    let mut ids = Vec::new();
+    collect_collection_items(&agent, id, 0, &mut seen, &mut ids)?;
+
+    // Cache titles/tags/descriptions for the collection and all children.
+    ensure_cached(&ids)?;
+    ensure_cached(&[id])?;
+    let cache = load_cache()?;
+    let meta = cache
+        .items
+        .get(&id.to_string())
+        .cloned()
+        .unwrap_or_default();
+    if let Some(app_id) = meta.consumer_app_id {
+        if app_id != 268500 {
+            bail!("This collection is not for XCOM 2 (app {app_id}).");
+        }
+    }
+
+    let mods = crate::mod_paths::all_mods()?;
+    let paths = discover_paths()?;
+    let by_workshop: HashMap<u64, &xcom2_launcher_core::AmlMod> = mods
+        .iter()
+        .filter_map(|entry| entry.workshop_id.filter(|id| *id > 0).map(|id| (id, entry)))
+        .collect();
+
+    let mut items = Vec::new();
+    let mut installed = 0usize;
+    let mut missing = 0usize;
+    let mut other_game = 0usize;
+    for child_id in ids {
+        let details = cache.items.get(&child_id.to_string());
+        let app_id = details.and_then(|details| details.consumer_app_id);
+        let entry = by_workshop.get(&child_id).copied();
+        let installed_dir = entry
+            .and_then(|entry| crate::mod_paths::entry_path(entry, &paths))
+            .is_some();
+        let status = if app_id.is_some_and(|app_id| app_id != 268500) {
+            other_game += 1;
+            "other_game"
+        } else if installed_dir {
+            installed += 1;
+            "installed"
+        } else {
+            missing += 1;
+            "missing"
+        };
+        items.push(CollectionItem {
+            workshop_id: child_id,
+            title: details.and_then(|details| details.title.clone()),
+            installed: status == "installed",
+            mod_id: if status == "installed" {
+                entry.map(|entry| entry.id.clone())
+            } else {
+                None
+            },
+            status: status.to_string(),
+            steam_url: format!("https://steamcommunity.com/sharedfiles/filedetails/?id={child_id}"),
+        });
+    }
+    items.sort_by(|a, b| {
+        a.title
+            .as_deref()
+            .unwrap_or("")
+            .to_lowercase()
+            .cmp(&b.title.as_deref().unwrap_or("").to_lowercase())
+            .then_with(|| a.workshop_id.cmp(&b.workshop_id))
+    });
+
+    Ok(CollectionPreview {
+        id,
+        title: meta
+            .title
+            .unwrap_or_else(|| format!("Steam collection {id}")),
+        description: meta.description.unwrap_or_default(),
+        url: format!("https://steamcommunity.com/sharedfiles/filedetails/?id={id}"),
+        total: items.len(),
+        installed,
+        missing,
+        other_game,
+        items,
     })
 }
 

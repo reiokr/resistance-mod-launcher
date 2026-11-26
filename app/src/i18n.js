@@ -3,6 +3,54 @@
 
 export const en = {
 
+  "Kontrollin profiili konflikte…": "Checking profile conflicts…",
+  "Kontroll: {conflicts} konflikti, {missing} puudulikku sõltuvust.":
+    "Check: {conflicts} conflicts, {missing} missing dependencies.",
+  "Konfliktikontroll ebaõnnestus.": "Conflict check failed.",
+
+  "Kollektsioon": "Collection",
+  "Lisatud {count} modi profiili „{name}”.":
+    "Added {count} mods to profile “{name}”.",
+  "Vali kõik": "Select all",
+  "Uued paigaldatud": "Installed, not yet added",
+  "Kõik paigaldatud kollektsiooni modid on juba profiilis.":
+    "All installed collection mods are already in the profile.",
+  "Lisan…": "Adding…",
+  "Lisa valitud ({count})": "Add selected ({count})",
+
+  // Profiles / Steam collections
+  "Uus profiil": "New profile",
+  "Loo tühi profiil või impordi Steam Workshopi kollektsioon.":
+    "Create an empty profile or import a Steam Workshop collection.",
+  "Steam collection": "Steam collection",
+  "{count} ootab": "{count} pending",
+  "Tühi profiil": "Empty profile",
+  "Workshopi kollektsioon": "Workshop collection",
+  "Steam Workshopi kollektsiooni URL või ID":
+    "Steam Workshop collection URL or ID",
+  "Laen…": "Loading…",
+  "Lae kollektsioon": "Load collection",
+  "Laen Steam Workshopi kollektsiooni…":
+    "Loading Steam Workshop collection…",
+  "{total} modi · {installed} olemas · {missing} puudub":
+    "{total} mods · {installed} installed · {missing} missing",
+  "Ava kollektsioon Steamis": "Open collection in Steam",
+  "Vali kõik olemasolevad ({count})": "Select all installed ({count})",
+  "Tühista valik": "Clear selection",
+  "Jälgi ka puuduvaid modisid": "Track missing mods too",
+  "Olemasolevad": "Installed",
+  "Ühtegi olemasolevat modi ei leitud.": "No installed mods found.",
+  "Kõik kollektsiooni modid on olemas.": "All collection mods are installed.",
+  "Loo profiil": "Create profile",
+  "Loon profiili kollektsioonist…": "Creating profile from collection…",
+  "Profiil loodud: {name} ({count} modi)": "Profile created: {name} ({count} mods)",
+  "Loon profiili…": "Creating profile…",
+  "Profiil loodud: {name}": "Profile created: {name}",
+  "Sisesta korrektne Steam Workshopi kollektsiooni URL või ID.":
+    "Enter a valid Steam Workshop collection URL or ID.",
+  "Profiili nimi on kohustuslik.": "Profile name is required.",
+  "Laadi enne kollektsioon.": "Load a collection first.",
+
   "Aktiveeri": "Enable",
   "Deaktiveeri": "Disable",
   "Lohista": "Drag",

@@ -18,10 +18,34 @@ pub struct Category {
     pub collapsed: bool,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ProfileSource {
+    #[serde(rename = "type", default)]
+    pub kind: String,
+    #[serde(default)]
+    pub id: u64,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub url: String,
+    #[serde(default)]
+    pub imported_at: i64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Profile {
     pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
     pub active_ids: Vec<String>,
+    #[serde(default)]
+    pub source: Option<ProfileSource>,
+    #[serde(default)]
+    pub collection_children: Vec<u64>,
+    #[serde(default)]
+    pub pending_workshop_ids: Vec<u64>,
+    #[serde(default)]
+    pub excluded_workshop_ids: Vec<u64>,
     pub updated: i64,
 }
 
@@ -54,7 +78,12 @@ pub struct CategoryView {
 #[derive(Debug, Clone, Serialize)]
 pub struct ProfileView {
     pub name: String,
+    pub description: Option<String>,
     pub count: usize,
+    pub pending_count: usize,
+    pub source_title: Option<String>,
+    pub source_id: Option<u64>,
+    pub source_url: Option<String>,
     pub updated: i64,
 }
 
@@ -186,7 +215,12 @@ pub fn profile_views(state: &PersistedState) -> Vec<ProfileView> {
         .iter()
         .map(|profile| ProfileView {
             name: profile.name.clone(),
+            description: profile.description.clone(),
             count: profile.active_ids.len(),
+            pending_count: profile.pending_workshop_ids.len(),
+            source_title: profile.source.as_ref().map(|source| source.title.clone()),
+            source_id: profile.source.as_ref().map(|source| source.id),
+            source_url: profile.source.as_ref().map(|source| source.url.clone()),
             updated: profile.updated,
         })
         .collect();
@@ -336,10 +370,35 @@ pub fn save_profile(state: &mut PersistedState, name: &str, active_ids: Vec<Stri
     } else {
         state.profiles.push(Profile {
             name: name.to_string(),
+            description: None,
             active_ids,
+            source: None,
+            collection_children: Vec::new(),
+            pending_workshop_ids: Vec::new(),
+            excluded_workshop_ids: Vec::new(),
             updated,
         });
     }
+    Ok(())
+}
+
+pub fn create_profile(state: &mut PersistedState, mut profile: Profile) -> Result<()> {
+    let name = profile.name.trim().to_string();
+    if name.is_empty() {
+        bail!("Profile name cannot be empty.");
+    }
+    if state.profiles.iter().any(|existing| existing.name == name) {
+        bail!("Profile already exists: {name}");
+    }
+    let mut seen = HashSet::new();
+    profile.active_ids = profile
+        .active_ids
+        .into_iter()
+        .filter(|id| !id.is_empty() && seen.insert(id.clone()))
+        .collect();
+    profile.name = name;
+    profile.updated = now();
+    state.profiles.push(profile);
     Ok(())
 }
 
@@ -405,5 +464,74 @@ mod tests {
         assert!(clear_mod_feedback(&mut state, "ModA"));
         assert!(!clear_mod_feedback(&mut state, "ModA"));
         assert!(state.category_feedback.is_empty());
+    }
+
+    #[test]
+    fn collection_profiles_keep_source_and_pending_ids() {
+        let mut state = PersistedState::default();
+        create_profile(
+            &mut state,
+            Profile {
+                name: "Star Wars".to_string(),
+                description: Some("Collection description".to_string()),
+                active_ids: vec!["ModA".to_string()],
+                source: Some(ProfileSource {
+                    kind: "steam_collection".to_string(),
+                    id: 42,
+                    title: "Star Wars Collection".to_string(),
+                    url: "https://example.invalid/42".to_string(),
+                    imported_at: 1,
+                }),
+                collection_children: vec![1, 2, 3],
+                pending_workshop_ids: vec![2, 3],
+                excluded_workshop_ids: Vec::new(),
+                updated: 0,
+            },
+        )
+        .unwrap();
+        assert!(
+            create_profile(
+                &mut state,
+                Profile {
+                    name: "Star Wars".to_string(),
+                    description: None,
+                    active_ids: Vec::new(),
+                    source: None,
+                    collection_children: Vec::new(),
+                    pending_workshop_ids: Vec::new(),
+                    excluded_workshop_ids: Vec::new(),
+                    updated: 0,
+                }
+            )
+            .is_err()
+        );
+
+        let views = profile_views(&state);
+        assert_eq!(views.len(), 1);
+        assert_eq!(
+            views[0].source_title.as_deref(),
+            Some("Star Wars Collection")
+        );
+        assert_eq!(views[0].source_id, Some(42));
+        assert_eq!(views[0].pending_count, 2);
+        assert_eq!(
+            views[0].description.as_deref(),
+            Some("Collection description")
+        );
+
+        save_profile(
+            &mut state,
+            "Star Wars",
+            vec!["ModA".to_string(), "ModB".to_string()],
+        )
+        .unwrap();
+        let profile = state
+            .profiles
+            .iter()
+            .find(|p| p.name == "Star Wars")
+            .unwrap();
+        assert_eq!(profile.active_ids.len(), 2);
+        assert_eq!(profile.source.as_ref().map(|s| s.id), Some(42));
+        assert_eq!(profile.pending_workshop_ids, vec![2, 3]);
     }
 }

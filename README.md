@@ -161,6 +161,8 @@ The library is UI-free so the Tauri backend can call it directly.
    - update indicators from `appworkshop_268500.acf` — done;
    - description/tags/details pane and tag filter — done;
    - missing dependency titles/tags from the Workshop API — done;
+   - Steam Workshop collection import into profiles — done (installed mods
+     matched by Workshop ID, missing mods linked to Steam);
    - optional native subscribe/unsubscribe via Steamworks — later.
 4. **Native Linux build**
    - Feral VFS paths (`~/.local/share/feral-interactive/...`);

@@ -46,7 +46,12 @@ install.
   feedback but keeps the categories.
 - Profiles: save the current active list/order under a name, apply it later,
   and delete it. Applying a profile is not written to `XComModOptions.ini`
-  until you press **Salvesta**.
+  until you press **Salvesta**. Profiles can also be created from a Steam
+  Workshop collection: installed collection mods are matched by Workshop ID
+  (no duplicates), selected with one click, and missing mods are listed with
+  **Ava Steamis** links. The collection description becomes the profile
+  description, and missing IDs stay tracked as pending. A later collection
+  view can add newly installed mods one by one.
 - Diagnostics: scans active mods for class/screen-listener conflicts, missing
   required Workshop dependencies (including installed-but-inactive ones), and
   duplicate mod IDs. Results are cached in `diagnostics.json` and shown in the
@@ -184,6 +189,10 @@ cargo run -- --headless-diagnostics
 - `--headless-state` prints the summary and paths.
 - `--headless-mods` prints `id<TAB>name<TAB>workshop_id<TAB>category` for every
   mod, including newly discovered Workshop subscriptions.
+- `--headless-collection <collection_id>` previews a Steam Workshop collection.
+- `--headless-import-collection <collection_id> [name]` creates a profile from
+  all currently installed collection mods (test helper).
+- `--headless-delete-profile <name>` deletes a profile (test helper).
 - `--headless-save` runs the same backend save path as the UI, without a window.
   With the current list it returns `unchanged: true` and writes nothing.
 - `--headless-diagnostics` scans the saved active list and prints
@@ -204,6 +213,10 @@ cargo run -- --headless-diagnostics
   details. Filters: status, native category, and Workshop tag (tags used by at
   least two mods). Search also matches Workshop tags.
 - **Laadimisjärjekord** tab: active mods in load order; drag rows or use ↑/↓.
+- **Profiilid** tab: create an empty profile or import a Steam Workshop
+  collection. Existing collection mods are selected by default (uncheck as
+  needed); missing mods stay visible with Steam links. Profile cards show the
+  collection source, description and pending count.
 - **Kategooriad** tab: category manager plus **Automaatne kategoriseerimine**.
   The preview shows counts and sample mods per category; **Rakenda** writes
   native categories and backs up `state.json` first. The overwrite checkbox
@@ -242,8 +255,8 @@ Backups: `~/.local/share/xcom2-launcher-linux/backups/<timestamp>/`
   are implemented; the list is still flat).
 - Conflict resolution/load-order hints beyond AML-style class override
   detection.
-- Workshop subscribe/unsubscribe and downloading updates (metadata/update
-  indicators are read-only and implemented).
+- Native Workshop subscribe/unsubscribe and downloading. Collection import is
+  read-only: missing mods open in Steam and must be subscribed there.
 - Workshop changelog viewer (the public Workshop API does not return it;
   Steamworks access would be needed).
 - Vanilla XCOM 2 mode (WotC is assumed).

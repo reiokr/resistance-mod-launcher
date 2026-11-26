@@ -22,6 +22,17 @@ pub fn entry_path(entry: &AmlMod, paths: &SteamPaths) -> Option<PathBuf> {
         .filter(|path| path.exists())
 }
 
+/// Load all configured mods plus newly discovered Workshop folders.
+pub fn all_mods() -> Result<Vec<AmlMod>> {
+    let paths = discover_paths()?;
+    let settings_path = paths
+        .settings
+        .clone()
+        .context("AML settings.json was not found")?;
+    let settings = AmlRoot::load(&settings_path)?;
+    settings.all_mods_with_workshop(paths.workshop_dir.as_deref())
+}
+
 /// Find a mod by ID in AML settings and resolve its directory.
 pub fn mod_dir(mod_id: &str) -> Result<PathBuf> {
     let paths = discover_paths()?;

@@ -315,8 +315,11 @@ impl AmlRoot {
             return Ok(mods);
         };
         let index = scan_workshop_mods(workshop_dir)?;
-        let known_ids: std::collections::HashSet<String> =
-            mods.iter().map(|entry| entry.id.to_lowercase()).collect();
+        let known_by_id: std::collections::HashMap<String, usize> = mods
+            .iter()
+            .enumerate()
+            .map(|(index, entry)| (entry.id.to_lowercase(), index))
+            .collect();
         let known_workshop: std::collections::HashSet<u64> = mods
             .iter()
             .filter_map(|entry| entry.workshop_id.filter(|id| *id > 0))
@@ -343,9 +346,32 @@ impl AmlRoot {
             };
             if folder_id == 0
                 || known_workshop.contains(&folder_id)
-                || known_ids.contains(&file.internal_id.to_lowercase())
                 || !seen_dirs.insert(mod_dir.clone())
             {
+                continue;
+            }
+
+            if let Some(index) = known_by_id.get(&file.internal_id.to_lowercase()) {
+                let entry = &mut mods[*index];
+                if entry.workshop_id.unwrap_or(0) == 0 {
+                    entry.workshop_id = Some(folder_id);
+                }
+                if entry
+                    .path
+                    .as_deref()
+                    .map_or(true, |path| path.trim().is_empty())
+                {
+                    entry.path = Some(mod_dir.to_string_lossy().to_string());
+                }
+                if entry.name.is_none() {
+                    entry.name = file.title.clone();
+                }
+                if entry.author.is_none() {
+                    entry.author = file.author.clone();
+                }
+                if entry.size == 0 {
+                    entry.size = directory_size(&mod_dir);
+                }
                 continue;
             }
 

@@ -30,6 +30,24 @@
   let editingCategory = $state(null);
   let editingName = $state("");
   let profileName = $state("");
+  let profileModalOpen = $state(false);
+  let profileMode = $state("empty");
+  let profileDraftName = $state("");
+  let profileDraftDescription = $state("");
+  let collectionInput = $state("");
+  let collectionPreview = $state(null);
+  let collectionLoading = $state(false);
+  let collectionError = $state("");
+  let collectionSelected = $state(new Set());
+  let collectionIncludePending = $state(true);
+  let profileCollectionOpen = $state(false);
+  let profileCollectionName = $state("");
+  let profileCollectionPreview = $state(null);
+  let profileCollectionActive = $state(new Set());
+  let profileCollectionSelected = $state(new Set());
+  let profileCollectionLoading = $state(false);
+  let profileCollectionSaving = $state(false);
+  let profileCollectionError = $state("");
   let configOpen = $state(false);
   let configMod = $state(null);
   let configFiles = $state([]);
@@ -51,7 +69,7 @@
   let readmeLoading = $state(false);
   let readmeError = $state("");
   let aboutOpen = $state(false);
-  let appVersion = $state("0.1.1");
+  let appVersion = $state("0.2.0");
 
   onMount(() => {
     document.documentElement.lang = lang;
@@ -477,6 +495,235 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     }
   }
 
+  function openProfileModal() {
+    profileModalOpen = true;
+    profileMode = "empty";
+    profileDraftName = "";
+    profileDraftDescription = "";
+    collectionInput = "";
+    collectionPreview = null;
+    collectionLoading = false;
+    collectionError = "";
+    collectionSelected = new Set();
+    collectionIncludePending = true;
+  }
+
+  function closeProfileModal() {
+    if (collectionLoading || busy) return;
+    profileModalOpen = false;
+  }
+
+  function parseCollectionId(value) {
+    const text = value.trim();
+    const match = text.match(/(?:id=|\/details\/|\/)(\d{5,})/);
+    return match ? match[1] : text;
+  }
+
+  function stripBbcode(value) {
+    return value
+      .replace(/\[\/?[^\]]+\]/g, "")
+      .replace(/\r/g, "")
+      .trim();
+  }
+
+  async function loadCollectionPreview() {
+    const id = parseCollectionId(collectionInput);
+    if (!/^\d+$/.test(id)) {
+      collectionError = t("Sisesta korrektne Steam Workshopi kollektsiooni URL või ID.");
+      return;
+    }
+    collectionLoading = true;
+    collectionError = "";
+    collectionPreview = null;
+    try {
+      const preview = await invoke("preview_steam_collection", {
+        collection_id: Number(id),
+      });
+      collectionPreview = preview;
+      collectionSelected = new Set(
+        preview.items
+          .filter((item) => item.installed)
+          .map((item) => item.workshop_id)
+      );
+      if (!profileDraftName.trim()) profileDraftName = preview.title;
+      if (!profileDraftDescription.trim()) {
+        profileDraftDescription = stripBbcode(preview.description);
+      }
+    } catch (err) {
+      collectionError = String(err);
+    } finally {
+      collectionLoading = false;
+    }
+  }
+
+  function toggleCollectionItem(workshopId) {
+    const next = new Set(collectionSelected);
+    if (next.has(workshopId)) next.delete(workshopId);
+    else next.add(workshopId);
+    collectionSelected = next;
+  }
+
+  function selectAllInstalled() {
+    if (!collectionPreview) return;
+    collectionSelected = new Set(
+      collectionPreview.items
+        .filter((item) => item.installed)
+        .map((item) => item.workshop_id)
+    );
+  }
+
+  function clearCollectionSelection() {
+    collectionSelected = new Set();
+  }
+
+  async function createProfileFromModal() {
+    if (busy) return;
+    if (!profileDraftName.trim()) {
+      collectionError = t("Profiili nimi on kohustuslik.");
+      return;
+    }
+    error = "";
+    collectionError = "";
+    if (profileMode === "collection") {
+      if (!collectionPreview) {
+        collectionError = t("Laadi enne kollektsioon.");
+        return;
+      }
+      const selected = collectionPreview.items.filter(
+        (item) => item.installed && collectionSelected.has(item.workshop_id)
+      );
+      const rank = new Map(activeOrder.map((id, index) => [id, index]));
+      selected.sort((a, b) => {
+        const aRank = a.mod_id != null ? rank.get(a.mod_id) : undefined;
+        const bRank = b.mod_id != null ? rank.get(b.mod_id) : undefined;
+        if (aRank != null && bRank != null) return aRank - bRank;
+        if (aRank != null) return -1;
+        if (bRank != null) return 1;
+        return (a.title || "").localeCompare(b.title || "");
+      });
+      busy = true;
+      busyText = t("Loon profiili kollektsioonist…");
+      try {
+        const name = await invoke("create_profile_from_collection", {
+          name: profileDraftName.trim(),
+          description: profileDraftDescription.trim() || null,
+          collection_id: collectionPreview.id,
+          selected_mod_ids: selected.map((item) => item.mod_id).filter(Boolean),
+          include_pending: collectionIncludePending,
+        });
+        profileModalOpen = false;
+        await load();
+        tab = "profiles";
+        message = t("Profiil loodud: {name} ({count} modi)", {
+          name,
+          count: selected.length,
+        });
+      } catch (err) {
+        collectionError = String(err);
+      } finally {
+        busy = false;
+        busyText = "";
+      }
+      return;
+    }
+
+    busy = true;
+    busyText = t("Loon profiili…");
+    try {
+      const name = await invoke("create_empty_profile", {
+        name: profileDraftName.trim(),
+        description: profileDraftDescription.trim() || null,
+      });
+      profileModalOpen = false;
+      await load();
+      tab = "profiles";
+      message = t("Profiil loodud: {name}", { name });
+    } catch (err) {
+      collectionError = String(err);
+    } finally {
+      busy = false;
+      busyText = "";
+    }
+  }
+
+  async function openProfileCollection(profile) {
+    profileCollectionOpen = true;
+    profileCollectionName = profile.name;
+    profileCollectionPreview = null;
+    profileCollectionActive = new Set();
+    profileCollectionSelected = new Set();
+    profileCollectionLoading = true;
+    profileCollectionError = "";
+    try {
+      const [ids, preview] = await Promise.all([
+        invoke("get_profile", { name: profile.name }),
+        invoke("profile_collection_preview", { name: profile.name }),
+      ]);
+      profileCollectionActive = new Set(ids);
+      profileCollectionPreview = preview;
+      profileCollectionSelected = new Set(
+        preview.items
+          .filter((item) => item.installed && !profileCollectionActive.has(item.mod_id))
+          .map((item) => item.workshop_id)
+      );
+    } catch (err) {
+      profileCollectionError = String(err);
+    } finally {
+      profileCollectionLoading = false;
+    }
+  }
+
+  function closeProfileCollection() {
+    if (profileCollectionSaving) return;
+    profileCollectionOpen = false;
+  }
+
+  function toggleProfileCollectionItem(workshopId) {
+    const next = new Set(profileCollectionSelected);
+    if (next.has(workshopId)) next.delete(workshopId);
+    else next.add(workshopId);
+    profileCollectionSelected = next;
+  }
+
+  function selectAllProfileCollection() {
+    if (!profileCollectionPreview) return;
+    profileCollectionSelected = new Set(
+      profileCollectionPreview.items
+        .filter((item) => item.installed && !profileCollectionActive.has(item.mod_id))
+        .map((item) => item.workshop_id)
+    );
+  }
+
+  async function addProfileCollectionMods() {
+    if (!profileCollectionPreview || profileCollectionSaving) return;
+    const selected = profileCollectionPreview.items.filter(
+      (item) =>
+        item.installed &&
+        !profileCollectionActive.has(item.mod_id) &&
+        profileCollectionSelected.has(item.workshop_id)
+    );
+    if (selected.length === 0) return;
+    profileCollectionSaving = true;
+    profileCollectionError = "";
+    try {
+      const added = await invoke("add_collection_mods_to_profile", {
+        name: profileCollectionName,
+        selected_mod_ids: selected.map((item) => item.mod_id).filter(Boolean),
+      });
+      profileCollectionOpen = false;
+      await load();
+      tab = "profiles";
+      message = t("Lisatud {count} modi profiili „{name}”.", {
+        count: added,
+        name: profileCollectionName,
+      });
+    } catch (err) {
+      profileCollectionError = String(err);
+    } finally {
+      profileCollectionSaving = false;
+    }
+  }
+
   async function saveProfile() {
     const name = profileName.trim();
     if (!name) return;
@@ -504,7 +751,28 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
       activeOrder = [...ids];
       syncOrderFields();
       tab = "order";
-      message = t("Profiil \"{name}\" rakendatud. Vajuta Salvesta, et see mängu configusse kirjutada.", { name });
+      let scanNote = "";
+      try {
+        busyText = t("Kontrollin profiili konflikte…");
+        const report = await invoke("scan_diagnostics", {
+          active_ids: activeOrder,
+        });
+        snapshot.diagnostics = report;
+        snapshot.summary.conflicts = report.conflicts.length;
+        snapshot.summary.missing_dependencies = report.missing_dependency_links;
+        scanNote = " " + t(
+          "Kontroll: {conflicts} konflikti, {missing} puudulikku sõltuvust.",
+          {
+            conflicts: report.conflicts.length,
+            missing: report.missing_dependency_count,
+          }
+        );
+      } catch {
+        scanNote = " " + t("Konfliktikontroll ebaõnnestus.");
+      }
+      message =
+        t("Profiil \"{name}\" rakendatud. Vajuta Salvesta, et see mängu configusse kirjutada.", { name }) +
+        scanNote;
     } catch (err) {
       error = String(err);
     } finally {
@@ -1119,6 +1387,9 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
           <div class="manager-title">
             <h2>{t("Profiilid")}</h2>
             <span class="muted">{t("{count} profiili", { count: snapshot.profiles.length })}</span>
+            <button class="primary manager-run" onclick={openProfileModal} disabled={busy}>
+              {t("Uus profiil")}
+            </button>
           </div>
           <div class="manager-add">
             <input
@@ -1131,13 +1402,44 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
               {t("Salvesta praegune ({count})", { count: activeOrder.length })}
             </button>
           </div>
-          <div class="manager-list">
+          <div class="profile-list">
             {#each snapshot.profiles as profile (profile.name)}
-              <div class="manager-row">
-                <strong>{profile.name}</strong>
-                <span class="muted">{t("{count} modi", { count: profile.count })}</span>
-                <button class="mini" onclick={() => applyProfile(profile.name)}>{t("Rakenda")}</button>
-                <button class="mini danger" onclick={() => deleteProfile(profile.name)}>{t("Kustuta")}</button>
+              <div class="profile-card">
+                <div class="profile-card-main">
+                  <div class="profile-card-title">
+                    <strong>{profile.name}</strong>
+                    {#if profile.source_title}
+                      <span class="badge">{t("Steam collection")}</span>
+                    {/if}
+                    {#if profile.pending_count > 0}
+                      <span class="badge warn">
+                        {t("{count} ootab", { count: profile.pending_count })}
+                      </span>
+                    {/if}
+                  </div>
+                  <div class="profile-card-meta">
+                    <span>{t("{count} modi", { count: profile.count })}</span>
+                    {#if profile.source_title}
+                      <span class="muted">{profile.source_title}</span>
+                    {/if}
+                  </div>
+                  {#if profile.description}
+                    <p class="profile-desc">{profile.description}</p>
+                  {/if}
+                </div>
+                <div class="profile-actions">
+                  {#if profile.source_id}
+                    <button class="mini" onclick={() => openProfileCollection(profile)}>
+                      {t("Kollektsioon")}
+                    </button>
+                    <button
+                      class="mini"
+                      onclick={() => invoke("open_workshop", { id: profile.source_id })}
+                    >{t("Ava Steamis")}</button>
+                  {/if}
+                  <button class="mini" onclick={() => applyProfile(profile.name)}>{t("Rakenda")}</button>
+                  <button class="mini danger" onclick={() => deleteProfile(profile.name)}>{t("Kustuta")}</button>
+                </div>
               </div>
             {/each}
             {#if snapshot.profiles.length === 0}
@@ -1588,6 +1890,293 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
             <div class="empty">{t("Sellel modil ei ole ReadMe.txt ega ReadMe.md faili.")}</div>
           {/if}
         </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if profileModalOpen}
+    <div
+      class="config-backdrop"
+      role="presentation"
+      onclick={(event) => {
+        if (event.target === event.currentTarget) closeProfileModal();
+      }}
+      onkeydown={(event) => {
+        if (event.key === "Escape") closeProfileModal();
+      }}
+    >
+      <div class="config-modal profile-modal" role="dialog" aria-modal="true" aria-label={t("Uus profiil")}>
+        <header class="config-head">
+          <div>
+            <h2>{t("Uus profiil")}</h2>
+            <p class="muted">{t("Loo tühi profiil või impordi Steam Workshopi kollektsioon.")}</p>
+          </div>
+          <div class="config-head-actions">
+            <button class="ghost" onclick={closeProfileModal} disabled={busy}>{t("Sulge")}</button>
+          </div>
+        </header>
+
+        <div class="profile-body">
+          <div class="profile-fields">
+            <label>
+              <span>{t("Nimi")}</span>
+              <input type="text" bind:value={profileDraftName} placeholder={t("Profiili nimi…")} />
+            </label>
+            <label>
+              <span>{t("Kirjeldus")}</span>
+              <textarea bind:value={profileDraftDescription} rows="3"></textarea>
+            </label>
+          </div>
+
+          <div class="profile-source">
+            <label class="profile-radio">
+              <input type="radio" bind:group={profileMode} value="empty" />
+              {t("Tühi profiil")}
+            </label>
+            <label class="profile-radio">
+              <input type="radio" bind:group={profileMode} value="collection" />
+              {t("Workshopi kollektsioon")}
+            </label>
+          </div>
+
+          {#if profileMode === "collection"}
+            <div class="collection-input">
+              <input
+                type="text"
+                bind:value={collectionInput}
+                placeholder={t("Steam Workshopi kollektsiooni URL või ID")}
+                onkeydown={(event) => event.key === "Enter" && loadCollectionPreview()}
+              />
+              <button class="primary" onclick={loadCollectionPreview} disabled={collectionLoading}>
+                {collectionLoading ? t("Laen…") : t("Lae kollektsioon")}
+              </button>
+            </div>
+
+            {#if collectionError}
+              <div class="banner error profile-banner">{collectionError}</div>
+            {/if}
+
+            {#if collectionLoading}
+              <div class="loading profile-loading">
+                <div class="spinner"></div>
+                <span>{t("Laen Steam Workshopi kollektsiooni…")}</span>
+              </div>
+            {:else if collectionPreview}
+              <div class="collection-summary">
+                <div>
+                  <strong>{collectionPreview.title}</strong>
+                  <p class="muted">
+                    {t("{total} modi · {installed} olemas · {missing} puudub", {
+                      total: collectionPreview.total,
+                      installed: collectionPreview.installed,
+                      missing: collectionPreview.missing,
+                    })}
+                  </p>
+                </div>
+                <button
+                  class="mini"
+                  onclick={() => invoke("open_workshop", { id: collectionPreview.id })}
+                >{t("Ava kollektsioon Steamis")}</button>
+              </div>
+
+              {#if collectionPreview.description}
+                <p class="collection-desc">{stripBbcode(collectionPreview.description)}</p>
+              {/if}
+
+              <div class="collection-actions">
+                <button class="mini" onclick={selectAllInstalled}>
+                  {t("Vali kõik olemasolevad ({count})", { count: collectionPreview.installed })}
+                </button>
+                <button class="mini" onclick={clearCollectionSelection}>
+                  {t("Tühista valik")}
+                </button>
+                <label class="profile-radio">
+                  <input type="checkbox" bind:checked={collectionIncludePending} />
+                  {t("Jälgi ka puuduvaid modisid")}
+                </label>
+              </div>
+
+              <div class="collection-columns">
+                <section class="collection-section">
+                  <h3>
+                    {t("Olemasolevad")}
+                    <span class="muted">{collectionPreview.installed}</span>
+                  </h3>
+                  <div class="collection-list">
+                    {#each collectionPreview.items.filter((item) => item.installed) as item (item.workshop_id)}
+                      <label class="collection-item">
+                        <input
+                          type="checkbox"
+                          checked={collectionSelected.has(item.workshop_id)}
+                          onchange={() => toggleCollectionItem(item.workshop_id)}
+                        />
+                        <span>{item.title || item.workshop_id}</span>
+                      </label>
+                    {:else}
+                      <div class="empty">{t("Ühtegi olemasolevat modi ei leitud.")}</div>
+                    {/each}
+                  </div>
+                </section>
+
+                <section class="collection-section">
+                  <h3>
+                    {t("Puuduvad")}
+                    <span class="muted">{collectionPreview.missing}</span>
+                  </h3>
+                  <div class="collection-list">
+                    {#each collectionPreview.items.filter((item) => item.status === "missing") as item (item.workshop_id)}
+                      <div class="collection-item">
+                        <span>{item.title || item.workshop_id}</span>
+                        <button
+                          class="mini"
+                          onclick={() => invoke("open_workshop", { id: item.workshop_id })}
+                        >{t("Ava Steamis")}</button>
+                      </div>
+                    {:else}
+                      <div class="empty">{t("Kõik kollektsiooni modid on olemas.")}</div>
+                    {/each}
+                  </div>
+                </section>
+              </div>
+            {/if}
+          {/if}
+        </div>
+
+        <footer class="profile-footer">
+          <button class="ghost" onclick={closeProfileModal} disabled={busy}>{t("Tühista")}</button>
+          <button
+            class="primary"
+            onclick={createProfileFromModal}
+            disabled={busy || collectionLoading || !profileDraftName.trim()}
+          >{t("Loo profiil")}</button>
+        </footer>
+      </div>
+    </div>
+  {/if}
+
+  {#if profileCollectionOpen}
+    <div
+      class="config-backdrop"
+      role="presentation"
+      onclick={(event) => {
+        if (event.target === event.currentTarget) closeProfileCollection();
+      }}
+      onkeydown={(event) => {
+        if (event.key === "Escape") closeProfileCollection();
+      }}
+    >
+      <div class="config-modal profile-modal" role="dialog" aria-modal="true" aria-label={t("Kollektsioon")}>
+        <header class="config-head">
+          <div>
+            <h2>{t("Kollektsioon")}</h2>
+            <p class="muted">{profileCollectionName}</p>
+          </div>
+          <div class="config-head-actions">
+            <button class="ghost" onclick={closeProfileCollection} disabled={profileCollectionSaving}>
+              {t("Sulge")}
+            </button>
+          </div>
+        </header>
+
+        <div class="profile-body">
+          {#if profileCollectionError}
+            <div class="banner error profile-banner">{profileCollectionError}</div>
+          {/if}
+
+          {#if profileCollectionLoading}
+            <div class="loading profile-loading">
+              <div class="spinner"></div>
+              <span>{t("Laen Steam Workshopi kollektsiooni…")}</span>
+            </div>
+          {:else if profileCollectionPreview}
+            <div class="collection-summary">
+              <div>
+                <strong>{profileCollectionPreview.title}</strong>
+                <p class="muted">
+                  {t("{total} modi · {installed} olemas · {missing} puudub", {
+                    total: profileCollectionPreview.total,
+                    installed: profileCollectionPreview.installed,
+                    missing: profileCollectionPreview.missing,
+                  })}
+                  · {t("{count} aktiivset", { count: profileCollectionActive.size })}
+                </p>
+              </div>
+              <button
+                class="mini"
+                onclick={() => invoke("open_workshop", { id: profileCollectionPreview.id })}
+              >{t("Ava kollektsioon Steamis")}</button>
+            </div>
+
+            <div class="collection-actions">
+              <button class="mini" onclick={selectAllProfileCollection}>
+                {t("Vali kõik")}
+              </button>
+              <button class="mini" onclick={() => (profileCollectionSelected = new Set())}>
+                {t("Tühista valik")}
+              </button>
+            </div>
+
+            <div class="collection-columns">
+              <section class="collection-section">
+                <h3>
+                  {t("Uued paigaldatud")}
+                  <span class="muted">
+                    {profileCollectionPreview.items.filter((item) => item.installed && !profileCollectionActive.has(item.mod_id)).length}
+                  </span>
+                </h3>
+                <div class="collection-list">
+                  {#each profileCollectionPreview.items.filter((item) => item.installed && !profileCollectionActive.has(item.mod_id)) as item (item.workshop_id)}
+                    <label class="collection-item">
+                      <input
+                        type="checkbox"
+                        checked={profileCollectionSelected.has(item.workshop_id)}
+                        onchange={() => toggleProfileCollectionItem(item.workshop_id)}
+                      />
+                      <span>{item.title || item.workshop_id}</span>
+                    </label>
+                  {:else}
+                    <div class="empty">{t("Kõik paigaldatud kollektsiooni modid on juba profiilis.")}</div>
+                  {/each}
+                </div>
+              </section>
+
+              <section class="collection-section">
+                <h3>
+                  {t("Puuduvad")}
+                  <span class="muted">{profileCollectionPreview.missing}</span>
+                </h3>
+                <div class="collection-list">
+                  {#each profileCollectionPreview.items.filter((item) => item.status === "missing") as item (item.workshop_id)}
+                    <div class="collection-item">
+                      <span>{item.title || item.workshop_id}</span>
+                      <button
+                        class="mini"
+                        onclick={() => invoke("open_workshop", { id: item.workshop_id })}
+                      >{t("Ava Steamis")}</button>
+                    </div>
+                  {:else}
+                    <div class="empty">{t("Kõik kollektsiooni modid on olemas.")}</div>
+                  {/each}
+                </div>
+              </section>
+            </div>
+          {/if}
+        </div>
+
+        <footer class="profile-footer">
+          <button class="ghost" onclick={closeProfileCollection} disabled={profileCollectionSaving}>
+            {t("Tühista")}
+          </button>
+          <button
+            class="primary"
+            onclick={addProfileCollectionMods}
+            disabled={profileCollectionSaving || profileCollectionSelected.size === 0}
+          >
+            {profileCollectionSaving
+              ? t("Lisan…")
+              : t("Lisa valitud ({count})", { count: profileCollectionSelected.size })}
+          </button>
+        </footer>
       </div>
     </div>
   {/if}
@@ -2264,6 +2853,244 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
 
   .manager-run {
     margin-left: auto;
+  }
+
+  .profile-list {
+    max-width: 860px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .profile-card {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 12px 14px;
+    border: 1px solid #202b3a;
+    border-radius: 11px;
+    background: rgba(15, 21, 30, 0.6);
+  }
+
+  .profile-card-main {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .profile-card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .profile-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 4px;
+    color: #8d9bb0;
+    font-size: 11.5px;
+  }
+
+  .profile-desc {
+    margin: 6px 0 0;
+    color: #8d9bb0;
+    font-size: 11.5px;
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    white-space: pre-wrap;
+  }
+
+  .profile-actions {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+
+  .profile-modal {
+    width: min(1000px, 100%);
+    height: min(880px, 100%);
+  }
+
+  .profile-body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 14px 18px;
+  }
+
+  .profile-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .profile-fields label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: #9fb0c6;
+    font-size: 11.5px;
+  }
+
+  .profile-fields input,
+  .profile-fields textarea,
+  .collection-input input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    border: 1px solid #263244;
+    border-radius: 9px;
+    background: #0f151e;
+    color: #e6edf3;
+    outline: none;
+    font: inherit;
+    resize: vertical;
+  }
+
+  .profile-fields input:focus,
+  .profile-fields textarea:focus,
+  .collection-input input:focus {
+    border-color: #2bb3ff;
+    box-shadow: 0 0 0 3px rgba(43, 179, 255, 0.12);
+  }
+
+  .profile-source {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin: 14px 0 10px;
+  }
+
+  .profile-radio {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #b9c7d8;
+    font-size: 12px;
+  }
+
+  .collection-input {
+    display: flex;
+    gap: 8px;
+    margin: 10px 0;
+  }
+
+  .collection-input input {
+    flex: 1;
+  }
+
+  .collection-summary {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 10px 12px;
+    border: 1px solid #243144;
+    border-radius: 9px;
+    background: #0d131b;
+  }
+
+  .collection-summary p {
+    margin: 3px 0 0;
+    color: #8d9bb0;
+    font-size: 11.5px;
+  }
+
+  .collection-desc {
+    max-height: 110px;
+    overflow: auto;
+    margin: 10px 0;
+    padding: 8px 10px;
+    border: 1px solid #202b3a;
+    border-radius: 9px;
+    color: #9fb0c6;
+    font-size: 11.5px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+  }
+
+  .collection-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 10px 0;
+  }
+
+  .collection-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .collection-section h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 6px;
+    font-size: 12px;
+  }
+
+  .collection-list {
+    max-height: 300px;
+    overflow: auto;
+    border: 1px solid #202b3a;
+    border-radius: 9px;
+    background: rgba(15, 21, 30, 0.6);
+  }
+
+  .collection-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 27px;
+    padding: 4px 8px;
+    border-bottom: 1px solid rgba(31, 41, 55, 0.6);
+    font-size: 11.5px;
+    color: #b9c7d8;
+  }
+
+  .collection-item:last-child {
+    border-bottom: none;
+  }
+
+  .collection-item span:first-child {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+  }
+
+  .collection-item input[type="checkbox"] {
+    flex-shrink: 0;
+  }
+
+  .profile-banner {
+    margin: 8px 0;
+  }
+
+  .profile-loading {
+    padding: 22px;
+  }
+
+  .profile-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 18px;
+    border-top: 1px solid #1c2635;
   }
 
   .auto-card {

@@ -10,6 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use xcom2_launcher_core::{
     APP_ID, AmlMod, AmlRoot, SteamPaths, build_active_mods, default_mod_options_timestamp,
@@ -717,6 +718,255 @@ fn get_profile(name: String) -> Result<Vec<String>, String> {
     state::get_profile(&app_state, &name).map_err(|err| format!("{err:#}"))
 }
 
+fn now_unix() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+async fn preview_steam_collection(
+    collection_id: u64,
+) -> Result<workshop::CollectionPreview, String> {
+    tauri::async_runtime::spawn_blocking(move || workshop::preview_collection(collection_id))
+        .await
+        .map_err(|err| format!("Collection task failed: {err}"))?
+        .map_err(|err| format!("{err:#}"))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn create_empty_profile(name: String, description: Option<String>) -> Result<String, String> {
+    let mut app_state = state::load().map_err(|err| format!("{err:#}"))?;
+    let profile = state::Profile {
+        name: name.clone(),
+        description: description.filter(|value| !value.trim().is_empty()),
+        active_ids: Vec::new(),
+        source: None,
+        collection_children: Vec::new(),
+        pending_workshop_ids: Vec::new(),
+        excluded_workshop_ids: Vec::new(),
+        updated: now_unix(),
+    };
+    state::create_profile(&mut app_state, profile).map_err(|err| format!("{err:#}"))?;
+    state::save(&app_state).map_err(|err| format!("{err:#}"))?;
+    Ok(name)
+}
+
+fn strip_bbcode(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    let mut in_tag = false;
+    for ch in value.chars() {
+        if ch == '[' {
+            in_tag = true;
+        } else if ch == ']' && in_tag {
+            in_tag = false;
+        } else if !in_tag {
+            out.push(ch);
+        }
+    }
+    out.replace('\r', "").trim().to_string()
+}
+
+fn create_profile_from_collection_impl(
+    name: String,
+    description: Option<String>,
+    collection_id: u64,
+    selected_mod_ids: Vec<String>,
+    include_pending: bool,
+) -> Result<String> {
+    let preview = workshop::preview_collection(collection_id)?;
+    let installed: HashMap<&str, &workshop::CollectionItem> = preview
+        .items
+        .iter()
+        .filter(|item| item.installed)
+        .filter_map(|item| item.mod_id.as_deref().map(|id| (id, item)))
+        .collect();
+    let selected_set: HashSet<&str> = selected_mod_ids.iter().map(String::as_str).collect();
+    let mut active_ids = Vec::new();
+    let mut seen = HashSet::new();
+    for id in &selected_mod_ids {
+        if installed.contains_key(id.as_str()) && seen.insert(id.clone()) {
+            active_ids.push(id.clone());
+        }
+    }
+    let excluded_workshop_ids = preview
+        .items
+        .iter()
+        .filter(|item| item.status == "installed")
+        .filter(|item| {
+            item.mod_id
+                .as_deref()
+                .is_some_and(|id| !selected_set.contains(id))
+        })
+        .map(|item| item.workshop_id)
+        .collect();
+    let pending_workshop_ids = if include_pending {
+        preview
+            .items
+            .iter()
+            .filter(|item| item.status == "missing")
+            .map(|item| item.workshop_id)
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let collection_children = preview
+        .items
+        .iter()
+        .filter(|item| item.status != "other_game")
+        .map(|item| item.workshop_id)
+        .collect();
+    let name = if name.trim().is_empty() {
+        preview.title.clone()
+    } else {
+        name.trim().to_string()
+    };
+    let description = description
+        .map(|value| strip_bbcode(&value))
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            let value = strip_bbcode(&preview.description);
+            if value.is_empty() { None } else { Some(value) }
+        });
+    let source = state::ProfileSource {
+        kind: "steam_collection".to_string(),
+        id: collection_id,
+        title: preview.title.clone(),
+        url: preview.url.clone(),
+        imported_at: now_unix(),
+    };
+    let mut app_state = state::load()?;
+    state::create_profile(
+        &mut app_state,
+        state::Profile {
+            name: name.clone(),
+            description,
+            active_ids,
+            source: Some(source),
+            collection_children,
+            pending_workshop_ids,
+            excluded_workshop_ids,
+            updated: now_unix(),
+        },
+    )?;
+    state::save(&app_state)?;
+    Ok(name)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+async fn create_profile_from_collection(
+    name: String,
+    description: Option<String>,
+    collection_id: u64,
+    selected_mod_ids: Vec<String>,
+    include_pending: bool,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        create_profile_from_collection_impl(
+            name,
+            description,
+            collection_id,
+            selected_mod_ids,
+            include_pending,
+        )
+    })
+    .await
+    .map_err(|err| format!("Collection profile task failed: {err}"))?
+    .map_err(|err| format!("{err:#}"))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+async fn profile_collection_preview(name: String) -> Result<workshop::CollectionPreview, String> {
+    tauri::async_runtime::spawn_blocking(move || -> Result<workshop::CollectionPreview> {
+        let app_state = state::load()?;
+        let profile = app_state
+            .profiles
+            .iter()
+            .find(|profile| profile.name == name)
+            .with_context(|| format!("Profile not found: {name}"))?;
+        let source = profile
+            .source
+            .as_ref()
+            .with_context(|| format!("Profile has no Steam collection: {name}"))?;
+        workshop::preview_collection(source.id)
+    })
+    .await
+    .map_err(|err| format!("Collection task failed: {err}"))?
+    .map_err(|err| format!("{err:#}"))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+async fn add_collection_mods_to_profile(
+    name: String,
+    selected_mod_ids: Vec<String>,
+) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || -> Result<usize> {
+        let mut app_state = state::load()?;
+        let profile_index = app_state
+            .profiles
+            .iter()
+            .position(|profile| profile.name == name)
+            .with_context(|| format!("Profile not found: {name}"))?;
+        let source_id = app_state.profiles[profile_index]
+            .source
+            .as_ref()
+            .map(|source| source.id)
+            .with_context(|| format!("Profile has no Steam collection: {name}"))?;
+        let preview = workshop::preview_collection(source_id)?;
+        let installed: HashMap<&str, &workshop::CollectionItem> = preview
+            .items
+            .iter()
+            .filter(|item| item.installed)
+            .filter_map(|item| item.mod_id.as_deref().map(|id| (id, item)))
+            .collect();
+        let added;
+        {
+            let profile = &mut app_state.profiles[profile_index];
+            let before = profile.active_ids.len();
+            for id in &selected_mod_ids {
+                if installed.contains_key(id.as_str()) && !profile.active_ids.contains(id) {
+                    profile.active_ids.push(id.clone());
+                }
+            }
+            let active_set: HashSet<&str> = profile.active_ids.iter().map(String::as_str).collect();
+            profile.pending_workshop_ids = preview
+                .items
+                .iter()
+                .filter(|item| item.status == "missing")
+                .map(|item| item.workshop_id)
+                .collect();
+            profile.collection_children = preview
+                .items
+                .iter()
+                .filter(|item| item.status != "other_game")
+                .map(|item| item.workshop_id)
+                .collect();
+            profile.excluded_workshop_ids = preview
+                .items
+                .iter()
+                .filter(|item| item.status == "installed")
+                .filter(|item| {
+                    item.mod_id
+                        .as_deref()
+                        .is_some_and(|id| !active_set.contains(id))
+                })
+                .map(|item| item.workshop_id)
+                .collect();
+            if let Some(source) = profile.source.as_mut() {
+                source.title = preview.title.clone();
+            }
+            profile.updated = now_unix();
+            added = profile.active_ids.len().saturating_sub(before);
+        }
+        state::save(&app_state)?;
+        Ok(added)
+    })
+    .await
+    .map_err(|err| format!("Collection task failed: {err}"))?
+    .map_err(|err| format!("{err:#}"))
+}
+
 #[tauri::command]
 fn preview_auto_categories(overwrite: bool) -> Result<auto_category::AutoPreview, String> {
     auto_category::preview(overwrite).map_err(|err| format!("{err:#}"))
@@ -860,6 +1110,92 @@ fn main() {
         return;
     }
 
+    if let Some(index) = args
+        .iter()
+        .position(|arg| arg == "--headless-import-collection")
+    {
+        let Some(id) = args.get(index + 1).and_then(|id| id.parse::<u64>().ok()) else {
+            eprintln!("Usage: --headless-import-collection <published_file_id> [name]");
+            std::process::exit(2);
+        };
+        let name = args.get(index + 2).cloned().unwrap_or_default();
+        match workshop::preview_collection(id) {
+            Ok(preview) => {
+                let selected: Vec<String> = preview
+                    .items
+                    .iter()
+                    .filter(|item| item.installed)
+                    .filter_map(|item| item.mod_id.clone())
+                    .collect();
+                match create_profile_from_collection_impl(name, None, id, selected, true) {
+                    Ok(name) => println!("{name}"),
+                    Err(err) => {
+                        eprintln!("{err:#}");
+                        std::process::exit(1);
+                    }
+                }
+            }
+            Err(err) => {
+                eprintln!("{err:#}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    if let Some(index) = args
+        .iter()
+        .position(|arg| arg == "--headless-delete-profile")
+    {
+        let Some(name) = args.get(index + 1) else {
+            eprintln!("Usage: --headless-delete-profile <name>");
+            std::process::exit(2);
+        };
+        match state::load().and_then(|mut app_state| {
+            state::delete_profile(&mut app_state, name)?;
+            state::save(&app_state)
+        }) {
+            Ok(()) => println!("deleted {name}"),
+            Err(err) => {
+                eprintln!("{err:#}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    if let Some(index) = args.iter().position(|arg| arg == "--headless-collection") {
+        let Some(id) = args.get(index + 1).and_then(|id| id.parse::<u64>().ok()) else {
+            eprintln!("Usage: --headless-collection <published_file_id>");
+            std::process::exit(2);
+        };
+        match workshop::preview_collection(id) {
+            Ok(preview) => {
+                println!(
+                    "{} — total: {}, installed: {}, missing: {}, other_game: {}",
+                    preview.title,
+                    preview.total,
+                    preview.installed,
+                    preview.missing,
+                    preview.other_game
+                );
+                for item in preview.items.iter().take(20) {
+                    println!(
+                        "  {}\t{}\t{}",
+                        item.workshop_id,
+                        item.status,
+                        item.title.as_deref().unwrap_or("?")
+                    );
+                }
+            }
+            Err(err) => {
+                eprintln!("{err:#}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
     if args.iter().any(|arg| arg == "--headless-mods") {
         match load_snapshot() {
             Ok(snapshot) => {
@@ -950,6 +1286,11 @@ fn main() {
             save_profile,
             delete_profile,
             get_profile,
+            preview_steam_collection,
+            create_empty_profile,
+            create_profile_from_collection,
+            profile_collection_preview,
+            add_collection_mods_to_profile,
             preview_auto_categories,
             apply_auto_categories,
             clear_category_feedback,
