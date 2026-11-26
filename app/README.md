@@ -2,7 +2,7 @@
 
 Native Linux UI for the `xcom2-launcher-core` crate.
 
-Status: **MVP**, tested against a 791-mod / 790-active War of the Chosen
+Status: **MVP**, tested against a 792-mod / 790-active War of the Chosen
 install.
 
 ## What it does
@@ -200,7 +200,7 @@ cargo run -- --headless-diagnostics
 
 ## UI
 
-- **Modid** tab: all 791 mods; checkbox toggles active state; click a row for
+- **Modid** tab: all 792 mods; checkbox toggles active state; click a row for
   details. Filters: status, native category, and Workshop tag (tags used by at
   least two mods). Search also matches Workshop tags.
 - **Laadimisjärjekord** tab: active mods in load order; drag rows or use ↑/↓.

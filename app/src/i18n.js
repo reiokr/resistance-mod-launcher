@@ -43,8 +43,8 @@ export const en = {
   "XCOM 2 suletud": "XCOM 2 closed",
   "AML on veel lahti. Salvestamiseks ja mängu käivitamiseks sulge AML (see hoiab settings.json-i ja võib configu üle kirjutada).":
     "AML is still open. Close AML before saving or launching (it holds settings.json and may overwrite the config).",
-  "791 modi, AML settings + workshop metadata":
-    "791 mods, AML settings + Workshop metadata",
+  "Modi nimekiri, AML settings + Workshopi metadata":
+    "Mod list, AML settings + Workshop metadata",
 
   // Tabs / filters
   "Modid": "Mods",

@@ -780,7 +780,7 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
       <div class="spinner"></div>
       <div>
         <strong>{t("Laen modi nimekirja…")}</strong>
-        <p>{t("791 modi, AML settings + workshop metadata")}</p>
+        <p>{t("Modi nimekiri, AML settings + Workshopi metadata")}</p>
       </div>
     </div>
   {:else if snapshot}

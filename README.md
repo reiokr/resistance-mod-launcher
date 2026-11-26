@@ -22,7 +22,7 @@ The `aml-preview` binary:
 
 - discovers Steam libraries (native, Flatpak, Snap), the XCOM 2 install, the
   Proton prefix and the AML directory;
-- imports AML's `settings.json` (all 791 mods, active state, load order);
+- imports AML's `settings.json` (all 792 mods, active state, load order);
 - scans `steamapps/workshop/content/268500` and merges newly subscribed mods
   that are not in AML's settings yet;
 - parses `.XComMod` metadata;
@@ -30,10 +30,10 @@ The `aml-preview` binary:
 - resolves the active list and generates a candidate `XComModOptions.ini`;
 - compares the generated list with the current game config.
 
-Validated against the current 791-mod install:
+Validated against the current 792-mod install:
 
 ```
-mods: 791, active: 790, missing: 0
+mods: 792, active: 790, missing: 0
 current ActiveMods: 790
 generated ActiveMods: 790
 IniVersion: generated == current
