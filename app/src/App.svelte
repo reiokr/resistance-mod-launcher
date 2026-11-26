@@ -1,6 +1,8 @@
 <script>
   import { onMount, tick } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { getVersion } from "@tauri-apps/api/app";
+  import { translate } from "./i18n.js";
 
   let snapshot = $state(null);
   let loading = $state(true);
@@ -13,6 +15,13 @@
   let categoryFilter = $state("all");
   let tagFilter = $state("all");
   let tab = $state("mods");
+  let lang = $state(localStorage.getItem("resistance-lang") || "et");
+  const t = (text, vars) => translate(lang, text, vars);
+  function toggleLanguage() {
+    lang = lang === "et" ? "en" : "et";
+    localStorage.setItem("resistance-lang", lang);
+    document.documentElement.lang = lang;
+  }
   let selectedId = $state(null);
   let details = $state(null);
   let activeOrder = $state([]);
@@ -41,8 +50,14 @@
   let readme = $state(null);
   let readmeLoading = $state(false);
   let readmeError = $state("");
+  let aboutOpen = $state(false);
+  let appVersion = $state("0.1.0");
 
-  onMount(load);
+  onMount(() => {
+    document.documentElement.lang = lang;
+    getVersion().then((version) => (appVersion = version)).catch(() => {});
+    load();
+  });
 
   async function load() {
     const firstLoad = !snapshot;
@@ -51,7 +66,7 @@
     } else {
       busy = true;
     }
-    busyText = firstLoad ? "Laen modi nimekirja…" : "Laen uuesti…";
+    busyText = firstLoad ? t("Laen modi nimekirja…") : t("Laen uuesti…");
     error = "";
     message = "";
     try {
@@ -217,7 +232,7 @@
 
   async function save() {
     busy = true;
-    busyText = "Salvestan XComModOptions.ini…";
+    busyText = t("Salvestan XComModOptions.ini…");
     error = "";
     message = "";
     try {
@@ -227,10 +242,10 @@
         for (const mod of snapshot.mods) mod.active = activeOrder.includes(mod.id);
       }
       message = result.unchanged
-        ? "Muudatusi ei olnud — XComModOptions.ini on juba sama."
-        : `Salvestatud ${result.active_count} aktiivset modi. Backup: ${result.backup ?? "—"}`;
+        ? t("Muudatusi ei olnud — XComModOptions.ini on juba sama.")
+        : t("Salvestatud {count} aktiivset modi. Backup: {backup}", { count: result.active_count, backup: result.backup ?? "—" });
       if (result.warnings?.length) {
-        message += ` Hoiatus: ${result.warnings.join(" · ")}`;
+        message += " " + t("Hoiatus: {warnings}", { warnings: result.warnings.join(" · ") });
       }
     } catch (err) {
       error = String(err);
@@ -242,15 +257,15 @@
 
   async function launch() {
     busy = true;
-    busyText = "Käivitan XCOM 2…";
+    busyText = t("Käivitan XCOM 2…");
     error = "";
     message = "";
     try {
       const result = await invoke("launch_game");
       let suffix = "";
       if (result.prelaunch) suffix += ` · prelaunch: ${result.prelaunch}`;
-      if (result.prelaunch_ok === false) suffix += " (prelaunch hoiatas)";
-      message = `XCOM 2 käivitatud (PID ${result.pid}): ${result.exe}${suffix}`;
+      if (result.prelaunch_ok === false) suffix += " " + t("(prelaunch hoiatas)");
+      message = t("XCOM 2 käivitatud (PID {pid}): {exe}{suffix}", { pid: result.pid, exe: result.exe, suffix });
     } catch (err) {
       error = String(err);
     } finally {
@@ -277,15 +292,15 @@
 
   async function refreshWorkshop() {
     busy = true;
-    busyText = "Värskendan Workshopi andmeid (590 modi)…";
+    busyText = t("Värskendan Workshopi andmeid (590 modi)…");
     error = "";
     message = "";
     try {
       const result = await invoke("refresh_workshop");
       await load();
-      message = `Workshop: ${result.fetched}/${result.total} uuendatud`;
+      message = t("Workshop: {fetched}/{total} uuendatud", { fetched: result.fetched, total: result.total });
       if (result.failed > 0) {
-        message += ` · ${result.failed} ebaõnnestus`;
+        message += t(" · {failed} ebaõnnestus", { failed: result.failed });
         if (result.errors?.length) message += ` (${result.errors[0]})`;
       }
     } catch (err) {
@@ -298,7 +313,7 @@
 
   async function setCategory(mod, category) {
     busy = true;
-    busyText = "Muudan kategooriat…";
+    busyText = t("Muudan kategooriat…");
     try {
       await invoke("set_mod_category", { mod_id: mod.id, category });
       mod.category = category;
@@ -316,13 +331,13 @@
     const name = newCategory.trim();
     if (!name) return;
     busy = true;
-    busyText = "Lisan kategooria…";
+    busyText = t("Lisan kategooria…");
     try {
       await invoke("create_category", { name });
       newCategory = "";
       await load();
       tab = "categories";
-      message = `Kategooria lisatud: ${name}`;
+      message = t("Kategooria lisatud: {name}", { name });
     } catch (err) {
       error = String(err);
     } finally {
@@ -335,14 +350,14 @@
     const name = editingName.trim();
     if (!name) return;
     busy = true;
-    busyText = "Nimetan kategooriat ümber…";
+    busyText = t("Nimetan kategooriat ümber…");
     try {
       await invoke("rename_category", { old: oldName, new: name });
       editingCategory = null;
       editingName = "";
       await load();
       tab = "categories";
-      message = `Kategooria ümber nimetatud: ${name}`;
+      message = t("Kategooria ümber nimetatud: {name}", { name });
     } catch (err) {
       error = String(err);
     } finally {
@@ -352,14 +367,14 @@
   }
 
   async function deleteCategory(name) {
-    if (!window.confirm(`Kustuta kategooria "${name}"? Modid liiguvad "Unsorted" alla.`)) return;
+    if (!window.confirm(t("Kustuta kategooria \"{name}\"? Modid liiguvad \"Unsorted\" alla.", { name }))) return;
     busy = true;
-    busyText = "Kustutan kategooriat…";
+    busyText = t("Kustutan kategooriat…");
     try {
       await invoke("delete_category", { name });
       await load();
       tab = "categories";
-      message = `Kategooria kustutatud: ${name}`;
+      message = t("Kategooria kustutatud: {name}", { name });
     } catch (err) {
       error = String(err);
     } finally {
@@ -370,7 +385,7 @@
 
   async function previewAutoCategories() {
     busy = true;
-    busyText = "Arvutan automaatseid kategooriaid…";
+    busyText = t("Arvutan automaatseid kategooriaid…");
     error = "";
     try {
       autoPreview = await invoke("preview_auto_categories", {
@@ -388,7 +403,7 @@
   async function applyAutoCategories() {
     if (!autoPreview) return;
     busy = true;
-    busyText = "Rakendan automaatseid kategooriaid…";
+    busyText = t("Rakendan automaatseid kategooriaid…");
     error = "";
     try {
       const result = await invoke("apply_auto_categories", {
@@ -397,13 +412,14 @@
       autoPreview = null;
       await load();
       tab = "categories";
-      message =
-        `Kategooriad rakendatud: ${result.assigned} modi, ` +
-        `${result.categories_created} uut kategooriat.` +
-        (result.manual_pinned
-          ? ` ${result.manual_pinned} käsitsi määratud modi jäi paigale.`
-          : "") +
-        (result.backup ? ` Varundus: ${result.backup}` : "");
+      message = t("Kategooriad rakendatud: {assigned} modi, {created} uut kategooriat.{manual}{backup}", {
+        assigned: result.assigned,
+        created: result.categories_created,
+        manual: result.manual_pinned
+          ? t(" {count} käsitsi määratud modi jäi paigale.", { count: result.manual_pinned })
+          : "",
+        backup: result.backup ? t(" Varundus: {path}", { path: result.backup }) : "",
+      });
     } catch (err) {
       error = String(err);
     } finally {
@@ -415,20 +431,20 @@
   async function clearCategoryLearning() {
     if (
       !window.confirm(
-        `Unustada ${manualCategoryCount} käsitsi määratud kategoorianäidet? Kategooriad ise jäävad alles.`
+t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jäävad alles.", { count: manualCategoryCount })
       )
     ) {
       return;
     }
     busy = true;
-    busyText = "Kustutan õpitud näiteid…";
+    busyText = t("Kustutan õpitud näiteid…");
     error = "";
     try {
       const count = await invoke("clear_category_feedback");
       autoPreview = null;
       await load();
       tab = "categories";
-      message = `Õpitud näited kustutatud (${count}). Kategooriad ise jäid alles.`;
+      message = t("Õpitud näited kustutatud ({count}). Kategooriad ise jäid alles.", { count });
     } catch (err) {
       error = String(err);
     } finally {
@@ -439,7 +455,7 @@
 
   async function clearManualCategory(mod) {
     busy = true;
-    busyText = "Eemaldan käsitsi määratud kategooriat õppimisest…";
+    busyText = t("Eemaldan käsitsi määratud kategooriat õppimisest…");
     error = "";
     try {
       const removed = await invoke("clear_mod_category_feedback", {
@@ -448,8 +464,8 @@
       mod.manual_category = false;
       autoPreview = null;
       message = removed
-        ? `“${mod.name}” kategooria ei ole enam õppimiseks kinnitatud.`
-        : `“${mod.name}” ei olnudki käsitsi kinnitatud.`;
+        ? t("“{name}” kategooria ei ole enam õppimiseks kinnitatud.", { name: mod.name })
+        : t("“{name}” ei olnudki käsitsi kinnitatud.", { name: mod.name });
     } catch (err) {
       error = String(err);
     } finally {
@@ -462,13 +478,13 @@
     const name = profileName.trim();
     if (!name) return;
     busy = true;
-    busyText = "Salvestan profiili…";
+    busyText = t("Salvestan profiili…");
     try {
       await invoke("save_profile", { name, active_ids: activeOrder });
       profileName = "";
       await load();
       tab = "profiles";
-      message = `Profiil salvestatud: ${name}`;
+      message = t("Profiil salvestatud: {name}", { name });
     } catch (err) {
       error = String(err);
     } finally {
@@ -479,13 +495,13 @@
 
   async function applyProfile(name) {
     busy = true;
-    busyText = "Rakendan profiili…";
+    busyText = t("Rakendan profiili…");
     try {
       const ids = await invoke("get_profile", { name });
       activeOrder = [...ids];
       syncOrderFields();
       tab = "order";
-      message = `Profiil "${name}" rakendatud. Vajuta Salvesta, et see mängu configusse kirjutada.`;
+      message = t("Profiil \"{name}\" rakendatud. Vajuta Salvesta, et see mängu configusse kirjutada.", { name });
     } catch (err) {
       error = String(err);
     } finally {
@@ -495,14 +511,14 @@
   }
 
   async function deleteProfile(name) {
-    if (!window.confirm(`Kustuta profiil "${name}"?`)) return;
+    if (!window.confirm(t("Kustuta profiil \"{name}\"?", { name }))) return;
     busy = true;
-    busyText = "Kustutan profiili…";
+    busyText = t("Kustutan profiili…");
     try {
       await invoke("delete_profile", { name });
       await load();
       tab = "profiles";
-      message = `Profiil kustutatud: ${name}`;
+      message = t("Profiil kustutatud: {name}", { name });
     } catch (err) {
       error = String(err);
     } finally {
@@ -513,7 +529,7 @@
 
   async function runDiagnostics() {
     busy = true;
-    busyText = `Kontrollin konflikte ja sõltuvusi (${activeOrder.length} aktiivset modi)…`;
+    busyText = t("Kontrollin konflikte ja sõltuvusi ({count} aktiivset modi)…", { count: activeOrder.length });
     error = "";
     message = "";
     try {
@@ -522,7 +538,7 @@
       snapshot.summary.conflicts = report.conflicts.length;
       snapshot.summary.missing_dependencies = report.missing_dependency_links;
       tab = "diagnostics";
-      message = `Kontroll valmis: ${report.missing_dependency_count} modi puudulike sõltuvustega, ${report.conflicts.length} konflikti, ${report.duplicate_groups.length} duplikaatrühma.`;
+      message = t("Kontroll valmis: {missing} modi puudulike sõltuvustega, {conflicts} konflikti, {duplicates} duplikaatrühma.", { missing: report.missing_dependency_count, conflicts: report.conflicts.length, duplicates: report.duplicate_groups.length });
     } catch (err) {
       error = String(err);
     } finally {
@@ -569,7 +585,7 @@
   async function loadConfigFile(path, force = false) {
     if (!configMod) return;
     if (!force && configDirty) {
-      if (!window.confirm("Sulge salvestamata muudatused?")) return;
+      if (!window.confirm(t("Sulge salvestamata muudatused?"))) return;
     }
     configLoading = true;
     configError = "";
@@ -604,13 +620,13 @@
       configOriginal = configContent;
       if (result.changed) {
         configMessage = result.backup
-          ? `Salvestatud. Varundus: ${result.backup}`
-          : "Salvestatud.";
+          ? t("Salvestatud. Varundus: {path}", { path: result.backup })
+          : t("Salvestatud.");
         configFiles = await invoke("list_mod_config_files", {
           mod_id: configMod.id,
         });
       } else {
-        configMessage = "Muudatusi ei olnud; fail jäi puutumata.";
+        configMessage = t("Muudatusi ei olnud; fail jäi puutumata.");
       }
     } catch (err) {
       configError = String(err);
@@ -620,7 +636,7 @@
   }
 
   function closeConfigEditor() {
-    if (configDirty && !window.confirm("Sulge salvestamata muudatustega?")) return;
+    if (configDirty && !window.confirm(t("Sulge salvestamata muudatustega?"))) return;
     configOpen = false;
     configMod = null;
     configFiles = [];
@@ -668,6 +684,9 @@
     if (readmeOpen && event.key === "Escape") {
       event.preventDefault();
       closeReadme();
+    } else if (aboutOpen && event.key === "Escape") {
+      event.preventDefault();
+      aboutOpen = false;
     }
   }
 
@@ -708,36 +727,41 @@
     <div class="brand">
       <div class="logo">R</div>
       <div>
-        <h1>Resistance Mod Launcher</h1>
+        <h1>{t("Resistance Mod Launcher")}</h1>
         <p>
-          Unofficial XCOM 2: WotC · Linux / Proton
+          {t("Unofficial XCOM 2: WotC · Linux / Proton")}
           {#if snapshot}
             <span class="dot">·</span>
-            {snapshot.summary.total} modi
+            {t("{count} modi", { count: snapshot.summary.total })}
             <span class="dot">·</span>
-            {snapshot.summary.active} aktiivset
+            {t("{count} aktiivset", { count: snapshot.summary.active })}
           {:else}
             <span class="dot">·</span>
-            laen…
+            {t("laen…")}
           {/if}
         </p>
       </div>
     </div>
 
     <div class="top-actions">
-      <button class="ghost" onclick={load} disabled={loading || busy}>Laadi uuesti</button>
+      <button
+        class="ghost lang"
+        onclick={toggleLanguage}
+        title={lang === "et" ? "Switch to English" : "Lülita eesti keelde"}
+      >{lang === "et" ? "EN" : "ET"}</button>
+      <button class="ghost" onclick={load} disabled={loading || busy}>{t("Laadi uuesti")}</button>
       <button class="ghost" onclick={refreshWorkshop} disabled={loading || busy}>
-        Värskenda Workshopi
+        {t("Värskenda Workshopi")}
       </button>
-      <button class="primary" onclick={save} disabled={loading || busy || !snapshot}>Salvesta</button>
-      <button class="launch" onclick={launch} disabled={loading || busy || !snapshot}>Käivita XCOM 2</button>
+      <button class="primary" onclick={save} disabled={loading || busy || !snapshot}>{t("Salvesta")}</button>
+      <button class="launch" onclick={launch} disabled={loading || busy || !snapshot}>{t("Käivita XCOM 2")}</button>
     </div>
   </header>
 
   {#if busy && !loading}
     <div class="activity">
       <div class="activity-track"><div class="activity-bar"></div></div>
-      <span>{busyText || "Töötlen…"}</span>
+      <span>{busyText || t("Töötlen…")}</span>
     </div>
   {/if}
 
@@ -752,87 +776,86 @@
     <div class="loading">
       <div class="spinner"></div>
       <div>
-        <strong>Laen modi nimekirja…</strong>
-        <p>791 modi, AML settings + workshop metadata</p>
+        <strong>{t("Laen modi nimekirja…")}</strong>
+        <p>{t("791 modi, AML settings + workshop metadata")}</p>
       </div>
     </div>
   {:else if snapshot}
     <section class="summary">
       <div class="stat">
         <strong>{snapshot.summary.active}</strong>
-        <span>aktiivset</span>
+        <span>{t("aktiivset")}</span>
       </div>
       <div class="stat">
         <strong>{snapshot.summary.total}</strong>
-        <span>kokku</span>
+        <span>{t("kokku")}</span>
       </div>
       <div class="stat" class:warn={snapshot.summary.missing > 0}>
         <strong>{snapshot.summary.missing}</strong>
-        <span>puudub</span>
+        <span>{t("puudub")}</span>
       </div>
       <div class="stat" class:warn={snapshot.summary.unknown_active > 0}>
         <strong>{snapshot.summary.unknown_active}</strong>
-        <span>tundmatut</span>
+        <span>{t("tundmatut")}</span>
       </div>
       <div class="stat" class:warn={snapshot.summary.updates > 0}>
         <strong>{snapshot.summary.updates}</strong>
-        <span>uuendust</span>
+        <span>{t("uuendust")}</span>
       </div>
       <div class="stat" class:warn={snapshot.summary.conflicts > 0}>
         <strong>{snapshot.summary.conflicts}</strong>
-        <span>konflikti</span>
+        <span>{t("konflikti")}</span>
       </div>
       <div class="stat" class:warn={snapshot.summary.missing_dependencies > 0}>
         <strong>{snapshot.summary.missing_dependencies}</strong>
-        <span>puuduvat sõltuvust</span>
+        <span>{t("puuduvat sõltuvust")}</span>
       </div>
       <div class="stat">
         <strong>{snapshot.summary.categories}</strong>
-        <span>kategooriat</span>
+        <span>{t("kategooriat")}</span>
       </div>
       <div class="stat args" title={snapshot.summary.args.join(" ")}>
         <strong>{snapshot.summary.args.join(" ") || "—"}</strong>
-        <span>käivituse argumendid</span>
+        <span>{t("käivituse argumendid")}</span>
       </div>
       <div class="chips">
         <span class:ok={snapshot.summary.steam_running} class="chip">
-          {snapshot.summary.steam_running ? "Steam töötab" : "Steam ei tööta"}
+          {snapshot.summary.steam_running ? t("Steam töötab") : t("Steam ei tööta")}
         </span>
         <span class:ok={!snapshot.summary.aml_running} class="chip">
-          {snapshot.summary.aml_running ? "AML on lahti" : "AML suletud"}
+          {snapshot.summary.aml_running ? t("AML on lahti") : t("AML suletud")}
         </span>
         <span class:ok={!snapshot.summary.game_running} class="chip">
-          {snapshot.summary.game_running ? "XCOM 2 töötab" : "XCOM 2 suletud"}
+          {snapshot.summary.game_running ? t("XCOM 2 töötab") : t("XCOM 2 suletud")}
         </span>
       </div>
     </section>
 
     {#if snapshot.summary.aml_running}
       <div class="banner warn">
-        AML on veel lahti. Salvestamiseks ja mängu käivitamiseks sulge AML (see hoiab
-        <code>settings.json</code>-i ja võib configu üle kirjutada).
+        {t("AML on veel lahti. Salvestamiseks ja mängu käivitamiseks sulge AML (see hoiab settings.json-i ja võib configu üle kirjutada).")}
       </div>
     {/if}
 
     <section class="toolbar">
       <div class="tabs" role="tablist">
         <button class:active={tab === "mods"} onclick={() => (tab = "mods")} role="tab">
-          Modid
+          {t("Modid")}
         </button>
         <button class:active={tab === "order"} onclick={() => (tab = "order")} role="tab">
-          Laadimisjärjekord
+          {t("Laadimisjärjekord")}
           <span class="tab-count">{activeOrder.length}</span>
         </button>
         <button class:active={tab === "categories"} onclick={() => (tab = "categories")} role="tab">
-          Kategooriad
+          {t("Kategooriad")}
           <span class="tab-count">{snapshot.categories.length}</span>
         </button>
         <button class:active={tab === "profiles"} onclick={() => (tab = "profiles")} role="tab">
-          Profiilid
+          {t("Profiilid")}
           <span class="tab-count">{snapshot.profiles.length}</span>
         </button>
         <button class:active={tab === "diagnostics"} onclick={() => (tab = "diagnostics")} role="tab">
-          Kontroll
+          {t("Kontroll")}
           <span class:has-issues={diagnosticsIssueCount > 0} class="tab-count">
             {diagnosticsIssueCount}
           </span>
@@ -843,23 +866,23 @@
         <input
           class="search"
           type="search"
-          placeholder="Otsi nime, autori, ID või kategooria järgi…"
+          placeholder={t("Otsi nime, autori, ID või kategooria järgi…")}
           bind:value={query}
         />
-        <select bind:value={stateFilter} title="Staatus">
-          <option value="all">Kõik</option>
-          <option value="active">Aktiivsed</option>
-          <option value="inactive">Väljas</option>
-          <option value="missing">Puuduvad</option>
+        <select bind:value={stateFilter} title={t("Staatus")}>
+          <option value="all">{t("Kõik")}</option>
+          <option value="active">{t("Aktiivsed")}</option>
+          <option value="inactive">{t("Väljas")}</option>
+          <option value="missing">{t("Puuduvad")}</option>
         </select>
-        <select bind:value={categoryFilter} title="Kategooria">
-          <option value="all">Kõik kategooriad</option>
+        <select bind:value={categoryFilter} title={t("Kategooria")}>
+          <option value="all">{t("Kõik kategooriad")}</option>
           {#each categories as category}
             <option value={category}>{category}</option>
           {/each}
         </select>
-        <select bind:value={tagFilter} title="Workshopi tag (vähemalt 2 modi)">
-          <option value="all">Kõik tagid</option>
+        <select bind:value={tagFilter} title={t("Workshopi tag (vähemalt 2 modi)")}>
+          <option value="all">{t("Kõik tagid")}</option>
           {#each workshopTags as tag}
             <option value={tag.name}>{tag.name} ({tag.count})</option>
           {/each}
@@ -873,12 +896,12 @@
         <div class="table">
           <div class="thead">
             <div class="cell check"></div>
-            <div class="cell">Nimi</div>
-            <div class="cell">Autor</div>
-            <div class="cell">Kategooria</div>
-            <div class="cell">Workshop</div>
-            <div class="cell">Suurus</div>
-            <div class="cell">Staatus</div>
+            <div class="cell">{t("Nimi")}</div>
+            <div class="cell">{t("Autor")}</div>
+            <div class="cell">{t("Kategooria")}</div>
+            <div class="cell">{t("Workshop")}</div>
+            <div class="cell">{t("Suurus")}</div>
+            <div class="cell">{t("Staatus")}</div>
           </div>
           <div class="tbody">
             {#each filteredMods as mod (mod.id)}
@@ -896,13 +919,13 @@
                     checked={mod.active}
                     onclick={(event) => event.stopPropagation()}
                     onchange={() => toggle(mod)}
-                    aria-label={`${mod.active ? "Deaktiveeri" : "Aktiveeri"} ${mod.name}`}
+                    aria-label={`${mod.active ? t("Deaktiveeri") : t("Aktiveeri")} ${mod.name}`}
                   />
                 </div>
                 <div class="cell name" title={mod.name}>
                   <span class="name-text">{mod.name}</span>
-                  {#if mod.missing}<span class="badge danger">puudub</span>{/if}
-                  {#if conflictModIds.has(mod.id)}<span class="badge warn">konflikt</span>{/if}
+                  {#if mod.missing}<span class="badge danger">{t("puudub")}</span>{/if}
+                  {#if conflictModIds.has(mod.id)}<span class="badge warn">{t("konflikt")}</span>{/if}
                   {#if dependencyModIds.has(mod.id)}<span class="badge warn">dep</span>{/if}
                 </div>
                 <div class="cell muted">{mod.author || "—"}</div>
@@ -913,13 +936,13 @@
                   {#if mod.active}
                     <span class="badge active">#{((mod.order ?? 0) + 1)}</span>
                   {:else}
-                    <span class="badge">väljas</span>
+                    <span class="badge">{t("väljas")}</span>
                   {/if}
-                  {#if mod.update_available}<span class="badge update">uuendus</span>{/if}
+                  {#if mod.update_available}<span class="badge update">{t("uuendus")}</span>{/if}
                 </div>
               </div>
             {:else}
-              <div class="empty">Ühtegi modi ei leitud.</div>
+              <div class="empty">{t("Ühtegi modi ei leitud.")}</div>
             {/each}
           </div>
         </div>
@@ -927,10 +950,10 @@
         <div class="order">
           <div class="order-head">
             <div>
-              <strong>Laadimisjärjekord</strong>
-              <span class="muted">— ülalpool laetakse enne, allpool hiljem</span>
+              <strong>{t("Laadimisjärjekord")}</strong>
+              <span class="muted">{t("— ülalpool laetakse enne, allpool hiljem")}</span>
             </div>
-            <span class="result-count">{activeMods.length} aktiivset</span>
+            <span class="result-count">{t("{count} aktiivset", { count: activeMods.length })}</span>
           </div>
           <div class="order-list" role="list">
             {#each activeMods as mod, index (mod.id)}
@@ -943,7 +966,7 @@
                 ondragover={dragOver}
                 ondrop={(event) => drop(event, mod.id)}
               >
-                <span class="handle" title="Lohista">⠿</span>
+                <span class="handle" title={t("Lohista")}>⠿</span>
                 <span class="pos">{index + 1}</span>
                 <span class="name">{mod.name}</span>
                 <span class="author muted">{mod.author || "—"}</span>
@@ -953,40 +976,35 @@
                     class="mini"
                     onclick={() => moveBy(mod.id, -1)}
                     disabled={index === 0}
-                    title="Liiguta üles"
+                    title={t("Liiguta üles")}
                   >↑</button>
                   <button
                     class="mini"
                     onclick={() => moveBy(mod.id, 1)}
                     disabled={index === activeMods.length - 1}
-                    title="Liiguta alla"
+                    title={t("Liiguta alla")}
                   >↓</button>
-                  <button class="mini danger" onclick={() => toggle(mod)} title="Eemalda aktiivsetest">×</button>
+                  <button class="mini danger" onclick={() => toggle(mod)} title={t("Eemalda aktiivsetest")}>×</button>
                 </div>
               </div>
             {:else}
-              <div class="empty">Kõik modid on väljas.</div>
+              <div class="empty">{t("Kõik modid on väljas.")}</div>
             {/each}
           </div>
         </div>
       {:else if tab === "categories"}
         <div class="manager">
           <div class="manager-title">
-            <h2>Kategooriad</h2>
-            <span class="muted">{snapshot.categories.length} kategooriat</span>
+            <h2>{t("Kategooriad")}</h2>
+            <span class="muted">{t("{count} kategooriat", { count: snapshot.categories.length })}</span>
           </div>
 
           <div class="auto-card">
             <div class="auto-head">
               <div>
-                <strong>Automaatne kategoriseerimine</strong>
+                <strong>{t("Automaatne kategoriseerimine")}</strong>
                 <p>
-                  Kasutab Workshopi tage, modi nime ja kirjeldust. Nimi
-                  normaliseeritakse (CamelCase/underscore), WOTC / War of the
-                  Chosen on versioonimarker, mitte kategooria — nime ülejäänud
-                  osa otsustab. Õpib sinu käsitsi määratud kategooriatest
-                  ({manualCategoryCount} näidet); käsitsi määratud modid jäävad
-                  paigale. Vaikimisi liigutatakse ainult “Unsorted” modid.
+                  {t("Kasutab Workshopi tage, modi nime ja kirjeldust. Nimi normaliseeritakse (CamelCase/underscore), WOTC / War of the Chosen on versioonimarker, mitte kategooria — nime ülejäänud osa otsustab. Õpib sinu käsitsi määratud kategooriatest ({count} näidet); käsitsi määratud modid jäävad paigale. Vaikimisi liigutatakse ainult “Unsorted” modid.", { count: manualCategoryCount })}
                 </p>
               </div>
               <label class="auto-check">
@@ -995,40 +1013,38 @@
                   bind:checked={autoOverwrite}
                   onchange={() => (autoPreview = null)}
                 />
-                Kirjuta üle ka olemasolevad
+                {t("Kirjuta üle ka olemasolevad")}
               </label>
               {#if manualCategoryCount > 0}
                 <button
                   class="mini danger"
                   onclick={clearCategoryLearning}
                   disabled={busy}
-                >Unusta õpitud ({manualCategoryCount})</button>
+                >{t("Unusta õpitud ({count})", { count: manualCategoryCount })}</button>
               {/if}
               <button class="primary" onclick={previewAutoCategories} disabled={busy}>
-                Tee eelvaade
+                {t("Tee eelvaade")}
               </button>
             </div>
 
             {#if autoPreview}
               <div class="auto-summary">
-                <span><strong>{autoPreview.assignable}</strong> modi liigub</span>
-                <span><strong>{autoPreview.groups.length}</strong> kategooriasse</span>
-                <span><strong>{autoPreview.total - autoPreview.assignable}</strong> jääb puutumata</span>
+                <span>{t("{count} modi liigub", { count: autoPreview.assignable })}</span>
+                <span>{t("{count} kategooriasse", { count: autoPreview.groups.length })}</span>
+                <span>{t("{count} jääb puutumata", { count: autoPreview.total - autoPreview.assignable })}</span>
                 {#if autoPreview.training_examples > 0}
-                  <span><strong>{autoPreview.learned}</strong> õpitud</span>
-                  <span><strong>{autoPreview.rule_based}</strong> reeglitest</span>
-                  <span><strong>{autoPreview.manual_pinned}</strong> käsitsi</span>
+                  <span>{t("{count} õpitud", { count: autoPreview.learned })}</span>
+                  <span>{t("{count} reeglitest", { count: autoPreview.rule_based })}</span>
+                  <span>{t("{count} käsitsi", { count: autoPreview.manual_pinned })}</span>
                 {:else}
                   <span>
-                    Õppimiseks vaja vähemalt 5 käsitsi määratud modi
-                    ({manualCategoryCount} olemas)
+                    {t("Õppimiseks vaja vähemalt 5 käsitsi määratud modi ({count} olemas)", { count: manualCategoryCount })}
                   </span>
                 {/if}
               </div>
               {#if autoPreview.assignable === 0}
                 <p class="auto-empty">
-                  Midagi liigutada ei ole. Kui soovid kõiki uuesti liigitada,
-                  märgi “Kirjuta üle ka olemasolevad”.
+                  {t("Midagi liigutada ei ole. Kui soovid kõiki uuesti liigitada, märgi “Kirjuta üle ka olemasolevad”.")}
                 </p>
               {:else}
                 <div class="auto-groups">
@@ -1050,8 +1066,8 @@
                     class="primary"
                     onclick={applyAutoCategories}
                     disabled={busy || autoPreview.assignable === 0}
-                  >Rakenda {autoPreview.assignable} modi</button>
-                  <button class="ghost" onclick={() => (autoPreview = null)}>Tühista</button>
+                  >{t("Rakenda {count} modi", { count: autoPreview.assignable })}</button>
+                  <button class="ghost" onclick={() => (autoPreview = null)}>{t("Tühista")}</button>
                 </div>
               {/if}
             {/if}
@@ -1060,11 +1076,11 @@
           <div class="manager-add">
             <input
               type="text"
-              placeholder="Uus kategooria…"
+              placeholder={t("Uus kategooria…")}
               bind:value={newCategory}
               onkeydown={(event) => event.key === "Enter" && createCategory()}
             />
-            <button class="primary" onclick={createCategory} disabled={busy}>Lisa</button>
+            <button class="primary" onclick={createCategory} disabled={busy}>{t("Lisa")}</button>
           </div>
           <div class="manager-list">
             {#each snapshot.categories as category (category.name)}
@@ -1078,112 +1094,108 @@
                       if (event.key === "Escape") editingCategory = null;
                     }}
                   />
-                  <button class="primary" onclick={() => renameCategory(category.name)}>Salvesta</button>
-                  <button class="ghost" onclick={() => (editingCategory = null)}>Tühista</button>
+                  <button class="primary" onclick={() => renameCategory(category.name)}>{t("Salvesta")}</button>
+                  <button class="ghost" onclick={() => (editingCategory = null)}>{t("Tühista")}</button>
                 {:else}
                   <strong>{category.name}</strong>
-                  <span class="muted">{categoryCounts.get(category.name) || 0} modi</span>
-                  <button class="mini" onclick={() => { editingCategory = category.name; editingName = category.name; }}>Nimeta</button>
+                  <span class="muted">{t("{count} modi", { count: categoryCounts.get(category.name) || 0 })}</span>
+                  <button class="mini" onclick={() => { editingCategory = category.name; editingName = category.name; }}>{t("Nimeta")}</button>
                   {#if category.name !== "Unsorted"}
-                    <button class="mini danger" onclick={() => deleteCategory(category.name)}>Kustuta</button>
+                    <button class="mini danger" onclick={() => deleteCategory(category.name)}>{t("Kustuta")}</button>
                   {/if}
                 {/if}
               </div>
             {/each}
           </div>
           <p class="manager-note">
-            Modid määratakse kategooriasse paremal detailpaneelis. Kategooriafilter on
-            modinimekirja kohal. Kategooriad on native appi omad; mängu config ei muutu.
+            {t("Modid määratakse kategooriasse paremal detailpaneelis. Kategooriafilter on modinimekirja kohal. Kategooriad on native appi omad; mängu config ei muutu.")}
           </p>
         </div>
       {:else if tab === "profiles"}
         <div class="manager">
           <div class="manager-title">
-            <h2>Profiilid</h2>
-            <span class="muted">{snapshot.profiles.length} profiili</span>
+            <h2>{t("Profiilid")}</h2>
+            <span class="muted">{t("{count} profiili", { count: snapshot.profiles.length })}</span>
           </div>
           <div class="manager-add">
             <input
               type="text"
-              placeholder="Profiili nimi…"
+              placeholder={t("Profiili nimi…")}
               bind:value={profileName}
               onkeydown={(event) => event.key === "Enter" && saveProfile()}
             />
             <button class="primary" onclick={saveProfile} disabled={busy}>
-              Salvesta praegune ({activeOrder.length})
+              {t("Salvesta praegune ({count})", { count: activeOrder.length })}
             </button>
           </div>
           <div class="manager-list">
             {#each snapshot.profiles as profile (profile.name)}
               <div class="manager-row">
                 <strong>{profile.name}</strong>
-                <span class="muted">{profile.count} modi</span>
-                <button class="mini" onclick={() => applyProfile(profile.name)}>Rakenda</button>
-                <button class="mini danger" onclick={() => deleteProfile(profile.name)}>Kustuta</button>
+                <span class="muted">{t("{count} modi", { count: profile.count })}</span>
+                <button class="mini" onclick={() => applyProfile(profile.name)}>{t("Rakenda")}</button>
+                <button class="mini danger" onclick={() => deleteProfile(profile.name)}>{t("Kustuta")}</button>
               </div>
             {/each}
             {#if snapshot.profiles.length === 0}
-              <div class="empty">Profiile veel pole.</div>
+              <div class="empty">{t("Profiile veel pole.")}</div>
             {/if}
           </div>
           <p class="manager-note">
-            Profiil salvestab aktiivsete modide järjekorra. Pärast Rakenda vajuta
-            <strong>Salvesta</strong>, et see mängu <code>XComModOptions.ini</code>-sse kirjutada.
+            {t("Profiil salvestab aktiivsete modide järjekorra. Pärast Rakenda vajuta Salvesta, et see mängu XComModOptions.ini-sse kirjutada.")}
           </p>
         </div>
       {:else}
         <div class="manager diagnostics">
           <div class="manager-title">
-            <h2>Kontroll</h2>
+            <h2>{t("Kontroll")}</h2>
             <span class="muted">
               {#if snapshot.diagnostics}
-                viimane kontroll {formatUnix(snapshot.diagnostics.scanned_at)} ·
-                {snapshot.diagnostics.active_mods} aktiivset modi
+                {t("viimane kontroll {date} · {count} aktiivset modi", {
+                  date: formatUnix(snapshot.diagnostics.scanned_at),
+                  count: snapshot.diagnostics.active_mods,
+                })}
               {:else}
-                veel pole tehtud
+                {t("veel pole tehtud")}
               {/if}
             </span>
             <button
               class="primary manager-run"
               onclick={runDiagnostics}
               disabled={busy}
-            >Käivita kontroll</button>
+            >{t("Käivita kontroll")}</button>
           </div>
 
           <p class="manager-note">
-            Kontroll loeb aktiivsete modide <code>Config/**/XComEngine.ini</code> ja
-            <code>Src/**/*.uc</code> faile. Konflikt = mitu aktiivset modi kirjutab üle
-            sama baasklassi erineva reaga. Sõltuvused loetakse AML
-            <code>settings.json</code>-ist; “paigaldatud, väljas” tähendab, et mod on
-            olemas, kuid pole aktiivne.
+            {t("Kontroll loeb aktiivsete modide Config/**/XComEngine.ini ja Src/**/*.uc faile. Konflikt = mitu aktiivset modi kirjutab üle sama baasklassi erineva reaga. Sõltuvused loetakse AML settings.json-ist; “paigaldatud, väljas” tähendab, et mod on olemas, kuid pole aktiivne.")}
           </p>
 
           {#if !snapshot.diagnostics}
             <div class="empty">
-              Kontrolli veel tehtud pole. Vajuta “Käivita kontroll”.
+              {t("Kontrolli veel tehtud pole. Vajuta “Käivita kontroll”.")}
             </div>
           {:else}
             <div class="diag-stats">
               <div class="diag-stat" class:warn={snapshot.diagnostics.missing_dependency_count > 0}>
                 <strong>{snapshot.diagnostics.missing_dependency_count}</strong>
-                <span>modi puudulike sõltuvustega</span>
-                <em>{snapshot.diagnostics.missing_dependency_links} puuduvat viidet</em>
+                <span>{t("{count} modi puudulike sõltuvustega", { count: snapshot.diagnostics.missing_dependency_count })}</span>
+                <em>{t("{count} puuduvat viidet", { count: snapshot.diagnostics.missing_dependency_links })}</em>
               </div>
               <div class="diag-stat" class:warn={snapshot.diagnostics.conflicts.length > 0}>
                 <strong>{snapshot.diagnostics.conflicts.length}</strong>
-                <span>klassikonflikti</span>
-                <em>{snapshot.diagnostics.conflict_mod_count} modi osalevad</em>
+                <span>{t("{count} klassikonflikti", { count: snapshot.diagnostics.conflicts.length })}</span>
+                <em>{t("{count} modi osalevad", { count: snapshot.diagnostics.conflict_mod_count })}</em>
               </div>
               <div class="diag-stat" class:warn={snapshot.diagnostics.duplicate_groups.length > 0}>
                 <strong>{snapshot.diagnostics.duplicate_groups.length}</strong>
-                <span>duplikaatrühma</span>
-                <em>{snapshot.diagnostics.duplicate_mod_count} modi</em>
+                <span>{t("{count} duplikaatrühma", { count: snapshot.diagnostics.duplicate_groups.length })}</span>
+                <em>{t("{count} modi", { count: snapshot.diagnostics.duplicate_mod_count })}</em>
               </div>
             </div>
 
-            <h3 class="diag-heading">Puuduvad sõltuvused</h3>
+            <h3 class="diag-heading">{t("Puuduvad sõltuvused")}</h3>
             {#if snapshot.diagnostics.missing_dependencies.length === 0}
-              <div class="empty">Kõik sõltuvused on aktiivsed.</div>
+              <div class="empty">{t("Kõik sõltuvused on aktiivsed.")}</div>
             {:else}
               <div class="diag-list">
                 {#each snapshot.diagnostics.missing_dependencies as issue (issue.mod_id)}
@@ -1196,7 +1208,7 @@
                       {#each issue.missing as dependency (dependency.workshop_id)}
                         <div class="dep-row">
                           <span class="mono">{dependency.workshop_id}</span>
-                          <span>{dependency.title || "Tundmatu mod"}</span>
+                          <span>{dependency.title || t("Tundmatu mod")}</span>
                           {#each dependency.tags.slice(0, 4) as tag}
                             <span class="tag">{tag}</span>
                           {/each}
@@ -1204,14 +1216,14 @@
                             <span class="tag">+{dependency.tags.length - 4}</span>
                           {/if}
                           {#if dependency.installed}
-                            <span class="badge">paigaldatud, väljas</span>
+                            <span class="badge">{t("paigaldatud, väljas")}</span>
                           {:else}
-                            <span class="badge danger">pole paigaldatud</span>
+                            <span class="badge danger">{t("pole paigaldatud")}</span>
                           {/if}
                           <button
                             class="mini"
                             onclick={() => invoke("open_workshop", { id: dependency.workshop_id })}
-                          >Ava Steamis</button>
+                          >{t("Ava Steamis")}</button>
                         </div>
                       {/each}
                     </div>
@@ -1220,9 +1232,9 @@
               </div>
             {/if}
 
-            <h3 class="diag-heading">Klassikonfliktid</h3>
+            <h3 class="diag-heading">{t("Klassikonfliktid")}</h3>
             {#if snapshot.diagnostics.conflicts.length === 0}
-              <div class="empty">Konflikte ei leitud.</div>
+              <div class="empty">{t("Konflikte ei leitud.")}</div>
             {:else}
               <div class="diag-list">
                 {#each snapshot.diagnostics.conflicts as conflict (conflict.base_class)}
@@ -1245,9 +1257,9 @@
               </div>
             {/if}
 
-            <h3 class="diag-heading">Duplikaat-ID-d</h3>
+            <h3 class="diag-heading">{t("Duplikaat-ID-d")}</h3>
             {#if snapshot.diagnostics.duplicate_groups.length === 0}
-              <div class="empty">Duplikaat-ID-sid ei leitud.</div>
+              <div class="empty">{t("Duplikaat-ID-sid ei leitud.")}</div>
             {:else}
               <div class="diag-list">
                 {#each snapshot.diagnostics.duplicate_groups as group (group.id)}
@@ -1281,16 +1293,16 @@
               selectedId = null;
               details = null;
             }}
-            aria-label="Sulge"
+            aria-label={t("Sulge")}
           >×</button>
           <h2>{selected.name}</h2>
-          <p class="muted">{selected.author || "Tundmatu autor"}</p>
+          <p class="muted">{selected.author || t("Tundmatu autor")}</p>
 
           <dl>
             <dt>ID</dt>
             <dd class="mono">{selected.id}</dd>
 
-            <dt>Kategooria</dt>
+            <dt>{t("Kategooria")}</dt>
             <dd>
               <select
                 value={selected.category}
@@ -1301,52 +1313,52 @@
                 {/each}
               </select>
               {#if selected.manual_category}
-                <span class="badge manual">käsitsi</span>
+                <span class="badge manual">{t("käsitsi")}</span>
                 <button
                   class="mini"
                   onclick={() => clearManualCategory(selected)}
                   disabled={busy}
-                  title="Eemalda see kategooria õppimisest"
-                >vabasta</button>
+                  title={t("Eemalda see kategooria õppimisest")}
+                >{t("vabasta")}</button>
               {/if}
             </dd>
 
-            <dt>Workshop</dt>
+            <dt>{t("Workshop")}</dt>
             <dd class="mono">{selected.workshop_id ?? "—"}</dd>
 
-            <dt>Suurus</dt>
+            <dt>{t("Suurus")}</dt>
             <dd>{formatSize(selected.size)}</dd>
 
             <dt>WotC</dt>
-            <dd>{selected.built_for_wotc ? "jah" : "ei"}</dd>
+            <dd>{selected.built_for_wotc ? t("jah") : t("ei")}</dd>
 
-            <dt>Staatus</dt>
+            <dt>{t("Staatus")}</dt>
             <dd>
               {selected.active
-                ? `aktiivne (#${(selected.order ?? 0) + 1})`
-                : "väljas"}
+                ? t("aktiivne (#{index})", { index: (selected.order ?? 0) + 1 })
+                : t("väljas")}
             </dd>
 
-            <dt>Asukoht</dt>
+            <dt>{t("Asukoht")}</dt>
             <dd class="path">{selected.path || "—"}</dd>
           </dl>
 
           <button class="ghost open-workshop" onclick={() => openConfigEditor(selected)}>
-            Muuda configut (INI)
+            {t("Muuda configut (INI)")}
           </button>
           <button class="ghost open-workshop" onclick={() => openReadme(selected)}>
-            Ava ReadMe
+            {t("Ava ReadMe")}
           </button>
 
           {#if modDependencyIssue(selected.id) || modConflicts(selected.id).length}
-            <h3>Kontroll</h3>
+            <h3>{t("Kontroll")}</h3>
             {#if modDependencyIssue(selected.id)}
               <div class="detail-issue">
-                <strong>Puuduvad sõltuvused</strong>
+                <strong>{t("Puuduvad sõltuvused")}</strong>
                 {#each modDependencyIssue(selected.id).missing as dependency (dependency.workshop_id)}
                   <div class="dep-row">
                     <span class="mono">{dependency.workshop_id}</span>
-                    <span>{dependency.title || "Tundmatu mod"}</span>
+                    <span>{dependency.title || t("Tundmatu mod")}</span>
                     {#each dependency.tags.slice(0, 4) as tag}
                       <span class="tag">{tag}</span>
                     {/each}
@@ -1354,9 +1366,9 @@
                       <span class="tag">+{dependency.tags.length - 4}</span>
                     {/if}
                     {#if dependency.installed}
-                      <span class="badge">paigaldatud, väljas</span>
+                      <span class="badge">{t("paigaldatud, väljas")}</span>
                     {:else}
-                      <span class="badge danger">pole paigaldatud</span>
+                      <span class="badge danger">{t("pole paigaldatud")}</span>
                     {/if}
                   </div>
                 {/each}
@@ -1364,7 +1376,7 @@
             {/if}
             {#each modConflicts(selected.id) as conflict (conflict.base_class)}
               <div class="detail-issue">
-                <strong>Konflikt: <span class="mono">{conflict.base_class}</span></strong>
+                <strong>{t("Konflikt: {class}", { class: conflict.base_class })}</strong>
                 {#each conflict.overrides as override (override.mod_id + override.new_class)}
                   <div class="override-row">
                     <span>{override.mod_name}</span>
@@ -1376,21 +1388,21 @@
           {/if}
 
           {#if details}
-            <h3>Workshop</h3>
+            <h3>{t("Workshop")}</h3>
             <dl>
-              <dt>Uuendatud</dt>
+              <dt>{t("Uuendatud")}</dt>
               <dd>{formatUnix(details.time_updated)}</dd>
-              <dt>Kohalik</dt>
+              <dt>{t("Kohalik")}</dt>
               <dd>{formatUnix(details.local_timeupdated)}</dd>
-              <dt>Uuendus</dt>
+              <dt>{t("Uuendus")}</dt>
               <dd>
                 {#if details.update_available}
-                  <span class="badge update">saadaval</span>
+                  <span class="badge update">{t("saadaval")}</span>
                 {:else}
                   —
                 {/if}
               </dd>
-              <dt>Tellijaid</dt>
+              <dt>{t("Tellijaid")}</dt>
               <dd>{details.subscriptions ?? "—"}</dd>
             </dl>
 
@@ -1402,21 +1414,21 @@
               </div>
             {/if}
 
-            <h3>Kirjeldus</h3>
+            <h3>{t("Kirjeldus")}</h3>
             <div class="description-text">{details.description || "—"}</div>
 
             {#if selected.workshop_id}
               <button
                 class="primary open-workshop"
                 onclick={() => invoke("open_workshop", { id: selected.workshop_id })}
-              >Ava Steamis</button>
+              >{t("Ava Steamis")}</button>
             {/if}
           {:else}
-            <p class="muted">Laen Workshopi andmeid…</p>
+            <p class="muted">{t("Laen Workshopi andmeid…")}</p>
           {/if}
 
           {#if selected.missing}
-            <p class="badge danger">Modi kaust puudub</p>
+            <p class="badge danger">{t("Modi kaust puudub")}</p>
           {/if}
         </aside>
       {/if}
@@ -1426,6 +1438,7 @@
       <span title={snapshot.paths.config ?? ""}>Config: {snapshot.paths.config ?? "—"}</span>
       <span title={snapshot.paths.backup_dir}>Backup: {snapshot.paths.backup_dir}</span>
       <span title={snapshot.paths.workshop_dir ?? ""}>Workshop: {snapshot.paths.workshop_dir ?? "—"}</span>
+      <button class="status-info" onclick={() => (aboutOpen = true)}>{t("Info")}</button>
     </footer>
   {/if}
 
@@ -1444,29 +1457,29 @@
         class="config-modal"
         role="dialog"
         aria-modal="true"
-        aria-label="Modi config"
+        aria-label={t("Modi config")}
       >
         <header class="config-head">
           <div>
-            <h2>Modi config</h2>
+            <h2>{t("Modi config")}</h2>
             <p class="muted">
-              {configMod?.name} · {configPath || "vali fail"}
+              {configMod?.name} · {configPath || t("vali fail")}
             </p>
           </div>
           <div class="config-head-actions">
-            {#if configDirty}<span class="badge warn">muudetud</span>{/if}
+            {#if configDirty}<span class="badge warn">{t("muudetud")}</span>{/if}
             <button
               class="ghost"
               onclick={() => configPath && loadConfigFile(configPath)}
               disabled={!configPath || configLoading || configSaving}
-            >Lae uuesti</button>
-            <button class="ghost" onclick={closeConfigEditor}>Sulge</button>
+            >{t("Lae uuesti")}</button>
+            <button class="ghost" onclick={closeConfigEditor}>{t("Sulge")}</button>
             <button
               class="primary"
               onclick={saveConfigFile}
               disabled={!configDirty || configSaving || configLoading}
             >
-              {configSaving ? "Salvestan…" : "Salvesta"}
+              {configSaving ? t("Salvestan…") : t("Salvesta")}
             </button>
           </div>
         </header>
@@ -1474,7 +1487,7 @@
         <div class="config-layout">
           <aside class="config-files">
             <div class="config-files-title">
-              <span>Config failid</span>
+              <span>{t("Config failid")}</span>
               <span>{configFiles.length}</span>
             </div>
             {#each configFiles as file (file.path)}
@@ -1488,7 +1501,7 @@
               </button>
             {/each}
             {#if !configFiles.length && !configLoading}
-              <div class="empty">Sellel modil pole Config/*.ini faile.</div>
+              <div class="empty">{t("Sellel modil pole Config/*.ini faile.")}</div>
             {/if}
           </aside>
 
@@ -1498,9 +1511,9 @@
                 <span>{configMeta.encoding}</span>
                 <span>{configMeta.newline === "crlf" ? "CRLF" : "LF"}</span>
                 <span>{formatUnix(configMeta.modified)}</span>
-                {#if configMeta.read_only}<span class="badge danger">ainult lugemine</span>{/if}
+                {#if configMeta.read_only}<span class="badge danger">{t("ainult lugemine")}</span>{/if}
               {/if}
-              <span class="config-meta-right">Ctrl+S salvestab · Esc sulgeb</span>
+              <span class="config-meta-right">{t("Ctrl+S salvestab · Esc sulgeb")}</span>
             </div>
 
             {#if configError}
@@ -1513,7 +1526,7 @@
             {#if configLoading}
               <div class="loading config-loading">
                 <div class="spinner"></div>
-                <span>Laen configut…</span>
+                <span>{t("Laen configut…")}</span>
               </div>
             {:else if configPath}
               <textarea
@@ -1525,7 +1538,7 @@
                 onkeydown={handleEditorKeydown}
               ></textarea>
             {:else}
-              <div class="empty">Vali vasakult config fail.</div>
+              <div class="empty">{t("Vali vasakult config fail.")}</div>
             {/if}
           </section>
         </div>
@@ -1554,23 +1567,55 @@
           </div>
           <div class="config-head-actions">
             {#if readme?.format === "markdown"}<span class="badge">Markdown</span>{/if}
-            {#if readme?.placeholder}<span class="badge warn">vaikesisu</span>{/if}
-            <button class="ghost" onclick={closeReadme}>Sulge</button>
+            {#if readme?.placeholder}<span class="badge warn">{t("vaikesisu")}</span>{/if}
+            <button class="ghost" onclick={closeReadme}>{t("Sulge")}</button>
           </div>
         </header>
         <div class="readme-body">
           {#if readmeLoading}
             <div class="loading readme-loading">
               <div class="spinner"></div>
-              <span>Laen ReadMe-d…</span>
+              <span>{t("Laen ReadMe-d…")}</span>
             </div>
           {:else if readmeError}
             <div class="banner error">{readmeError}</div>
           {:else if readme?.found}
             <pre class="readme-text">{readme.content}</pre>
           {:else}
-            <div class="empty">Sellel modil ei ole ReadMe.txt ega ReadMe.md faili.</div>
+            <div class="empty">{t("Sellel modil ei ole ReadMe.txt ega ReadMe.md faili.")}</div>
           {/if}
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if aboutOpen}
+    <div
+      class="config-backdrop"
+      role="presentation"
+      onclick={(event) => {
+        if (event.target === event.currentTarget) aboutOpen = false;
+      }}
+      onkeydown={(event) => {
+        if (event.key === "Escape") aboutOpen = false;
+      }}
+    >
+      <div class="config-modal about-modal" role="dialog" aria-modal="true" aria-label={t("Info")}>
+        <header class="config-head">
+          <div>
+            <h2>Resistance Mod Launcher</h2>
+            <p class="muted">{appVersion} · GPL-3.0-only</p>
+          </div>
+          <div class="config-head-actions">
+            <button class="ghost" onclick={() => (aboutOpen = false)}>{t("Sulge")}</button>
+          </div>
+        </header>
+        <div class="about-body">
+          <p>{t("Unofficial mod launcher for XCOM 2: War of the Chosen on Linux. Not affiliated with Firaxis, 2K, Take-Two, Valve, or the AML project.")}</p>
+          <p>{t("See projekt on GPL-3.0-only litsentsi all. Täistekst on repos failis LICENSE.")}</p>
+          <p class="muted">
+            https://github.com/reiokr/resistance-mod-launcher
+          </p>
         </div>
       </div>
     </div>
@@ -1640,6 +1685,13 @@
     display: flex;
     gap: 8px;
     flex-shrink: 0;
+  }
+
+  .top-actions .lang {
+    min-width: 42px;
+    padding-left: 8px;
+    padding-right: 8px;
+    font-weight: 700;
   }
 
   button {
@@ -1742,11 +1794,6 @@
     background: rgba(240, 180, 41, 0.08);
     border-color: rgba(240, 180, 41, 0.3);
     color: #f3d28a;
-  }
-
-  code {
-    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
-    font-size: 0.95em;
   }
 
   .loading {
@@ -2261,10 +2308,6 @@
     color: #9fb0c6;
   }
 
-  .auto-summary strong {
-    color: #e6edf3;
-  }
-
   .auto-empty {
     margin: 10px 0 0;
     color: #728196;
@@ -2612,6 +2655,26 @@
     text-overflow: ellipsis;
   }
 
+  .status-info {
+    margin-left: auto;
+    flex-shrink: 0;
+    min-width: 44px;
+    padding: 1px 7px;
+    text-align: center;
+    white-space: nowrap;
+    border: 1px solid #263244;
+    border-radius: 999px;
+    background: transparent;
+    color: #8fa1b8;
+    font-size: 10px;
+    cursor: pointer;
+  }
+
+  .status-info:hover {
+    color: #e6edf3;
+    border-color: #2bb3ff;
+  }
+
   .config-backdrop {
     position: fixed;
     inset: 0;
@@ -2797,6 +2860,34 @@
     font-family: "Inter", "Noto Sans", system-ui, sans-serif;
     font-size: 13px;
     line-height: 1.6;
+  }
+
+  .about-modal {
+    width: min(620px, 100%);
+    height: auto;
+    max-height: min(620px, 100%);
+  }
+
+  .about-body {
+    padding: 16px 20px 22px;
+    overflow: auto;
+    color: #b9c7d8;
+    font-size: 12.5px;
+    line-height: 1.6;
+  }
+
+  .about-body p {
+    margin: 0 0 10px;
+  }
+
+  .about-body p:last-child {
+    margin-bottom: 0;
+  }
+
+  .about-body .muted {
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    font-size: 11px;
+    overflow-wrap: anywhere;
   }
 
   @media (max-width: 1180px) {

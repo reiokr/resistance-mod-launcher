@@ -7,6 +7,7 @@ install.
 
 ## What it does
 
+- Estonian and English UI with an `ET`/`EN` toggle in the top bar.
 - Imports AML's `settings.json` for mod metadata (name, author, category,
   workshop ID, size, path).
 - Treats `XComModOptions.ini` as the source of truth for the active list and

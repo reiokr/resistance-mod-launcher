@@ -1,8 +1,8 @@
-# xcom2-launcher-linux (core prototype)
+# Resistance Mod Launcher (core + Tauri)
 
-Native Linux core for XCOM 2 mod management. This is the first step toward a
-Tauri 2 + Svelte 5 alternative to AML that runs natively on Linux and manages
-the Windows/Proton install without Wine.
+Native Linux core and desktop app for XCOM 2 mod management. This is an
+independent Tauri 2 + Svelte 5 implementation that runs natively on Linux and
+manages the Windows/Proton install without Wine.
 
 **Status: core + Tauri 2 MVP.** The core CLI is read-only; the Tauri app can
 save `XComModOptions.ini` with a backup and launch WotC. See
@@ -85,6 +85,9 @@ With the current 790 active mods the first save is
 `unchanged: true` (byte-identical). The launch command checks that Steam is
 running and runs the optional
 `~/.config/xcom2-launcher-linux/prelaunch` hook before starting the game.
+
+The UI ships with Estonian and English translations. The `EN`/`ET` button in
+the top bar switches languages; the choice is stored locally.
 
 ## Safety
 

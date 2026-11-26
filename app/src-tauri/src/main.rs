@@ -338,10 +338,10 @@ fn load_snapshot() -> Result<AppSnapshot> {
 
 fn save_state_impl(active_ids: Vec<String>) -> Result<SaveResult> {
     if aml_running() {
-        bail!("AML on veel lahti. Sulge AML enne salvestamist — see hoiab settings.json-i.");
+        bail!("AML is still open. Close AML before saving — it holds settings.json.");
     }
     if game_running() {
-        bail!("XCOM 2 töötab. Sulge mäng enne salvestamist.");
+        bail!("XCOM 2 is running. Close the game before saving.");
     }
 
     let mut seen = HashSet::new();
@@ -385,7 +385,7 @@ fn save_state_impl(active_ids: Vec<String>) -> Result<SaveResult> {
     let mut warnings = Vec::new();
     let missing_count = active.iter().filter(|entry| entry.missing).count();
     if missing_count > 0 {
-        warnings.push(format!("{missing_count} aktiivse modi kaust puudub"));
+        warnings.push(format!("{missing_count} active mod folders are missing"));
     }
 
     let engine_path = config_dir.join("XComEngine.ini");
@@ -395,7 +395,7 @@ fn save_state_impl(active_ids: Vec<String>) -> Result<SaveResult> {
             .any(|line| line.trim_start().starts_with("ModRootDirs="))
         {
             warnings.push(
-                "XComEngine.ini-s puudub ModRootDirs — modid ei pruugi laadida".to_string(),
+                "XComEngine.ini is missing ModRootDirs — mods may not load".to_string(),
             );
         }
     }
@@ -412,13 +412,13 @@ fn save_state_impl(active_ids: Vec<String>) -> Result<SaveResult> {
 
 fn launch_game_impl() -> Result<LaunchResult> {
     if game_running() {
-        bail!("XCOM 2 töötab juba.");
+        bail!("XCOM 2 is already running.");
     }
     if aml_running() {
-        bail!("AML on lahti. Sulge AML enne mängu käivitamist.");
+        bail!("AML is open. Close AML before launching the game.");
     }
     if !steam_running() {
-        bail!("Steam ei tööta. Käivita Steam ja logi sisse.");
+        bail!("Steam is not running. Start Steam and sign in.");
     }
     let paths = discover_paths()?;
     let settings_path = paths
@@ -527,7 +527,7 @@ fn launch_game_impl() -> Result<LaunchResult> {
         .arg(&batch_win);
 
     let child = command.spawn().with_context(|| {
-        "protontricks-launch ei käivitanud. Kas protontricks on paigaldatud?".to_string()
+        "protontricks-launch did not start. Is protontricks installed?".to_string()
     })?;
 
     Ok(LaunchResult {
@@ -713,7 +713,7 @@ fn preview_auto_categories(overwrite: bool) -> Result<auto_category::AutoPreview
 #[tauri::command]
 fn apply_auto_categories(overwrite: bool) -> Result<auto_category::AutoApplyResult, String> {
     if aml_running() {
-        return Err("Sulge AML enne kategooriate muutmist.".to_string());
+        return Err("Close AML before changing categories.".to_string());
     }
     auto_category::apply(overwrite).map_err(|err| format!("{err:#}"))
 }
@@ -751,10 +751,10 @@ fn save_mod_config(
     content: String,
 ) -> Result<config_editor::ConfigSaveResult, String> {
     if aml_running() {
-        return Err("Sulge AML enne configu muutmist.".to_string());
+        return Err("Close AML before changing config.".to_string());
     }
     if game_running() {
-        return Err("Sulge XCOM 2 enne configu muutmist.".to_string());
+        return Err("Close XCOM 2 before changing config.".to_string());
     }
     config_editor::save(&mod_id, &path, &content).map_err(|err| format!("{err:#}"))
 }
