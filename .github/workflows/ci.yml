@@ -38,6 +38,7 @@ jobs:
         working-directory: app
         run: |
           pnpm install --frozen-lockfile
+          pnpm check:i18n
           pnpm build
 
       - name: Tauri backend tests
