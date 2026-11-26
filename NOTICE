@@ -32,7 +32,7 @@ AML's file formats and observable behavior were used for interoperability:
   - reading mod ReadMe/Config files.
 
 No game files, Workshop mods, Steam content, or third-party launcher assets are
-distributed with this project.
+distributed with this project. See `PROVENANCE.md` for the audit notes.
 
 --------------------------------------------------------------------------------
 Trademarks
