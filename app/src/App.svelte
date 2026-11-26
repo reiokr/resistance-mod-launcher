@@ -77,7 +77,7 @@
   let readmeLoading = $state(false);
   let readmeError = $state("");
   let aboutOpen = $state(false);
-  let appVersion = $state("0.2.1");
+  let appVersion = $state("0.2.2");
 
   onMount(() => {
     document.documentElement.lang = lang;
