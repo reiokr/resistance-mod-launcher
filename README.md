@@ -9,7 +9,8 @@ save `XComModOptions.ini` with a backup and launch WotC. The UI is available in
 Estonian and English. See [`app/README.md`](app/README.md).
 
 Source: <https://github.com/reiokr/resistance-mod-launcher> ·
-[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) ·
+[Third-party notices](THIRD_PARTY_NOTICES.md)
 
 ## What works
 
