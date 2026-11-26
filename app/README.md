@@ -217,6 +217,11 @@ cargo run -- --headless-diagnostics
   collection. Existing collection mods are selected by default (uncheck as
   needed); missing mods stay visible with Steam links. Profile cards show the
   collection source, description and pending count.
+- **Profile picker** in the top bar: selecting a profile applies its active
+  list/order immediately, runs the conflict check, and marks the profile as
+  current. A yellow dot means the current list differs from the saved profile;
+  use **Salvesta praegune** in Profiilid to update it. **Salvesta** in the top
+  bar still writes the game config.
 - **Kategooriad** tab: category manager plus **Automaatne kategoriseerimine**.
   The preview shows counts and sample mods per category; **Rakenda** writes
   native categories and backs up `state.json` first. The overwrite checkbox

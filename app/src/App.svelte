@@ -30,6 +30,14 @@
   let editingCategory = $state(null);
   let editingName = $state("");
   let profileName = $state("");
+  let currentProfile = $state(null);
+  let profileBaseline = $state(null);
+  const profileDirty = $derived(
+    !!currentProfile &&
+      !!profileBaseline &&
+      (activeOrder.length !== profileBaseline.length ||
+        activeOrder.some((id, index) => id !== profileBaseline[index]))
+  );
   let profileModalOpen = $state(false);
   let profileMode = $state("empty");
   let profileDraftName = $state("");
@@ -69,7 +77,7 @@
   let readmeLoading = $state(false);
   let readmeError = $state("");
   let aboutOpen = $state(false);
-  let appVersion = $state("0.2.0");
+  let appVersion = $state("0.2.1");
 
   onMount(() => {
     document.documentElement.lang = lang;
@@ -90,6 +98,13 @@
     try {
       snapshot = await invoke("get_state");
       activeOrder = [...snapshot.active_ids];
+      if (
+        currentProfile &&
+        !snapshot.profiles.some((profile) => profile.name === currentProfile)
+      ) {
+        currentProfile = null;
+        profileBaseline = null;
+      }
       selectedId = null;
       details = null;
       autoPreview = null;
@@ -603,6 +618,7 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
       });
       busy = true;
       busyText = t("Loon profiili kollektsioonist…");
+      const currentIds = [...activeOrder];
       try {
         const name = await invoke("create_profile_from_collection", {
           name: profileDraftName.trim(),
@@ -613,6 +629,8 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
         });
         profileModalOpen = false;
         await load();
+        activeOrder = currentIds;
+        syncOrderFields();
         tab = "profiles";
         message = t("Profiil loodud: {name} ({count} modi)", {
           name,
@@ -629,6 +647,7 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
 
     busy = true;
     busyText = t("Loon profiili…");
+    const currentIds = [...activeOrder];
     try {
       const name = await invoke("create_empty_profile", {
         name: profileDraftName.trim(),
@@ -636,6 +655,8 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
       });
       profileModalOpen = false;
       await load();
+      activeOrder = currentIds;
+      syncOrderFields();
       tab = "profiles";
       message = t("Profiil loodud: {name}", { name });
     } catch (err) {
@@ -711,7 +732,10 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
         selected_mod_ids: selected.map((item) => item.mod_id).filter(Boolean),
       });
       profileCollectionOpen = false;
+      const currentIds = [...activeOrder];
       await load();
+      activeOrder = currentIds;
+      syncOrderFields();
       tab = "profiles";
       message = t("Lisatud {count} modi profiili „{name}”.", {
         count: added,
@@ -730,9 +754,14 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     busy = true;
     busyText = t("Salvestan profiili…");
     try {
-      await invoke("save_profile", { name, active_ids: activeOrder });
+      const savedIds = [...activeOrder];
+      await invoke("save_profile", { name, active_ids: savedIds });
       profileName = "";
       await load();
+      activeOrder = savedIds;
+      syncOrderFields();
+      currentProfile = name;
+      profileBaseline = [...savedIds];
       tab = "profiles";
       message = t("Profiil salvestatud: {name}", { name });
     } catch (err) {
@@ -743,12 +772,24 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     }
   }
 
+  async function selectProfile(event) {
+    const name = event.target.value;
+    if (!name) {
+      currentProfile = null;
+      profileBaseline = null;
+      return;
+    }
+    if (name !== currentProfile) await applyProfile(name);
+  }
+
   async function applyProfile(name) {
     busy = true;
     busyText = t("Rakendan profiili…");
     try {
       const ids = await invoke("get_profile", { name });
       activeOrder = [...ids];
+      currentProfile = name;
+      profileBaseline = [...ids];
       syncOrderFields();
       tab = "order";
       let scanNote = "";
@@ -1015,6 +1056,27 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     </div>
 
     <div class="top-actions">
+      <div class="profile-picker">
+        <select
+          value={currentProfile ?? ""}
+          onchange={selectProfile}
+          disabled={loading || busy || !snapshot}
+          title={t("Profiil / modpack")}
+        >
+          <option value="">{t("Muu / salvestamata")}</option>
+          {#each snapshot?.profiles ?? [] as profile (profile.name)}
+            <option value={profile.name}>
+              {profile.name}{profile.pending_count > 0 ? ` · ${t("{count} ootab", { count: profile.pending_count })}` : ""}
+            </option>
+          {/each}
+        </select>
+        {#if profileDirty}
+          <span
+            class="profile-dirty"
+            title={t("Muudatused ei ole profiili salvestatud")}
+          >●</span>
+        {/if}
+      </div>
       <button
         class="ghost lang"
         onclick={toggleLanguage}
@@ -2275,8 +2337,40 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
 
   .top-actions {
     display: flex;
+    align-items: center;
+    justify-content: flex-end;
     gap: 8px;
     flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+
+  .profile-picker {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+  }
+
+  .profile-picker select {
+    max-width: 240px;
+    min-width: 150px;
+    padding: 8px 10px;
+    border-radius: 9px;
+    border: 1px solid #263244;
+    background: #0f151e;
+    color: #cfdae8;
+    outline: none;
+  }
+
+  .profile-picker select:focus {
+    border-color: #2bb3ff;
+  }
+
+  .profile-dirty {
+    color: #f0b429;
+    font-size: 13px;
+    line-height: 1;
+    cursor: help;
   }
 
   .top-actions .lang {

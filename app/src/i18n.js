@@ -3,6 +3,11 @@
 
 export const en = {
 
+  "Profiil / modpack": "Profile / modpack",
+  "Muu / salvestamata": "Other / unsaved",
+  "Muudatused ei ole profiili salvestatud":
+    "Changes are not saved to the profile",
+
   "Kontrollin profiili konflikte…": "Checking profile conflicts…",
   "Kontroll: {conflicts} konflikti, {missing} puudulikku sõltuvust.":
     "Check: {conflicts} conflicts, {missing} missing dependencies.",
