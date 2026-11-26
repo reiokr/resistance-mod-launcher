@@ -14,9 +14,12 @@ if [ "${1:-}" != "--no-build" ]; then
     pnpm tauri build
 fi
 
-APPIMAGE="$(find "$HERE/src-tauri/target/release/bundle/appimage" -maxdepth 1 -name '*.AppImage' -print -quit)"
+APPIMAGE="$HERE/src-tauri/target/release/bundle/appimage/Resistance Mod Launcher_${VERSION}_amd64.AppImage"
+if [ ! -f "$APPIMAGE" ]; then
+    APPIMAGE="$(find "$HERE/src-tauri/target/release/bundle/appimage" -maxdepth 1 -name "*_${VERSION}_*.AppImage" -print -quit)"
+fi
 [ -f "$APPIMAGE" ] || {
-    echo "AppImage not found; run \`pnpm tauri build\` first." >&2
+    echo "AppImage for version ${VERSION} not found; run \`pnpm tauri build\` first." >&2
     exit 1
 }
 
