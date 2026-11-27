@@ -16,6 +16,14 @@ Source: <https://github.com/reiokr/resistance-mod-launcher> ·
 [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) ·
 [Third-party notices](THIRD_PARTY_NOTICES.md)
 
+## Why this exists
+
+Switching XCOM 2 modpacks normally means clearing the active mod list and
+rebuilding it from scratch. Resistance Mod Launcher stores each modpack as a
+profile with its own load order, deactivated mods and missing/pending Workshop
+IDs. Apply a profile, press **Save**, launch. Profiles can also be exported and
+imported on another machine, so a modpack is no longer tied to one installation.
+
 ## Before you start
 
 | Requirement | Required? | Why |
@@ -64,6 +72,41 @@ SHA-256 checksums are attached to every release as `SHA256SUMS`.
 - **Save is blocked?** Close AML or XCOM 2.
 - **Dependencies look incomplete?** Install AML or import its `settings.json`
   once.
+
+### Diagnosing startup problems
+
+Run the AppImage from a terminal:
+
+```bash
+./Resistance-Mod-Launcher-*.AppImage --doctor
+```
+
+Paste the output into a GitHub issue. `--version` prints the launcher version.
+If the AppImage does not start at all, include the terminal error and try
+`APPIMAGE_EXTRACT_AND_RUN=1 ./Resistance-Mod-Launcher-*.AppImage --doctor` to
+rule out FUSE.
+
+## Tested on
+
+- CachyOS (Arch-based), KDE Wayland
+- Proton-CachyOS 11.0
+- XCOM 2: War of the Chosen via Steam
+- large modded install (1000+ mods)
+
+Other distributions are untested. The AppImage expects a working WebKitGTK 4.1,
+GTK 3 and `xdg-desktop-portal`; missing system libraries are the most common
+reason it does not start.
+
+## Known limitations
+
+- Linux only; there is no native Windows build.
+- XCOM 2: War of the Chosen via Steam and Proton is the supported target.
+- Unsubscribe/resubscribe is manual in Steam by design.
+- Cleanup scans the detected Workshop library; multiple Steam libraries are not
+  fully handled yet.
+- Dependency checks work best with AML installed; without AML, dependency
+  metadata may be incomplete.
+- AppImage is the only package; Flatpak/Snap/AUR packages are not provided yet.
 
 ## What works
 

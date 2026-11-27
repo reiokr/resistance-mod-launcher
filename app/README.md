@@ -16,8 +16,11 @@ install.
   conflict checks, export/import and cleanup.
 - Close AML or XCOM 2 before saving or launching.
 
-See the [root README](../README.md) for the full requirement table and a short
-troubleshooting checklist.
+See the [root README](../README.md) for the full requirement table, test notes
+and a short troubleshooting checklist.
+
+Tested on CachyOS + Proton-CachyOS 11.0; other distributions are untested.
+For bug reports, run the AppImage with `--doctor` and include the output.
 
 ## What it does
 

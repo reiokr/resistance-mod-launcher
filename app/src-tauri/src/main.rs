@@ -8,7 +8,7 @@ use anyhow::{Context, Result, bail};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -156,6 +156,134 @@ fn aml_running() -> bool {
 
 fn game_running() -> bool {
     pgrep("XCom2.exe")
+}
+
+fn os_pretty_name() -> String {
+    let Ok(text) = fs::read_to_string("/etc/os-release") else {
+        return std::env::consts::OS.to_string();
+    };
+    let mut pretty = None;
+    let mut id = None;
+    for line in text.lines() {
+        if let Some(value) = line.strip_prefix("PRETTY_NAME=") {
+            pretty = Some(value.trim_matches('"').to_string());
+        } else if let Some(value) = line.strip_prefix("ID=") {
+            id = Some(value.trim_matches('"').to_string());
+        }
+    }
+    pretty
+        .or(id)
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| std::env::consts::OS.to_string())
+}
+
+fn kernel_release() -> String {
+    fs::read_to_string("/proc/sys/kernel/osrelease")
+        .map(|value| value.trim().to_string())
+        .unwrap_or_else(|_| "unknown".to_string())
+}
+
+fn env_or_dash(key: &str) -> String {
+    std::env::var(key).unwrap_or_else(|_| "—".to_string())
+}
+
+fn command_in_path(name: &str) -> bool {
+    std::env::var_os("PATH")
+        .map(|paths| std::env::split_paths(&paths).any(|dir| dir.join(name).is_file()))
+        .unwrap_or(false)
+}
+
+fn print_path(label: &str, path: &Option<PathBuf>) {
+    match path {
+        Some(path) => println!(
+            "{label}: {} [{}]",
+            path.display(),
+            if path.exists() { "exists" } else { "missing" }
+        ),
+        None => println!("{label}: missing"),
+    }
+}
+
+fn print_doctor() {
+    println!("Resistance Mod Launcher {}", env!("CARGO_PKG_VERSION"));
+    println!(
+        "Binary: {}",
+        std::env::current_exe()
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|_| "unknown".to_string())
+    );
+    println!("OS: {}", os_pretty_name());
+    println!("Kernel: {}", kernel_release());
+    println!(
+        "Session: type={}, desktop={}, wayland={}, display={}",
+        env_or_dash("XDG_SESSION_TYPE"),
+        env_or_dash("XDG_CURRENT_DESKTOP"),
+        env_or_dash("WAYLAND_DISPLAY"),
+        env_or_dash("DISPLAY")
+    );
+    println!("AppImage: {}", env_or_dash("APPIMAGE"));
+    println!(
+        "FUSE (/dev/fuse): {}",
+        if Path::new("/dev/fuse").exists() {
+            "available"
+        } else {
+            "missing"
+        }
+    );
+    println!("Steam running: {}", yes_no(steam_running()));
+    println!("AML running: {}", yes_no(aml_running()));
+    println!("XCOM 2 running: {}", yes_no(game_running()));
+    println!(
+        "protontricks-launch in PATH: {}",
+        yes_no(command_in_path("protontricks-launch"))
+    );
+    println!(
+        "xdg-desktop-portal running: {}",
+        yes_no(pgrep("xdg-desktop-portal"))
+    );
+
+    match discover_paths() {
+        Ok(paths) => {
+            print_path("Steam root", &paths.steam_root);
+            print_path("Steam library", &paths.library);
+            print_path("Game dir", &paths.game_dir);
+            print_path("Proton prefix", &paths.prefix);
+            print_path("Workshop dir", &paths.workshop_dir);
+            print_path("AML dir", &paths.aml_dir);
+            print_path("AML settings.json", &paths.settings);
+            let wotc_config = paths
+                .wotc_config
+                .as_ref()
+                .map(|dir| dir.join("XComModOptions.ini"));
+            print_path("XComModOptions.ini", &wotc_config);
+            if let Some(game_dir) = paths.game_dir.as_deref() {
+                let exe = game_dir.join("XCom2-WarOfTheChosen/Binaries/Win64/XCom2.exe");
+                println!(
+                    "WotC executable: {} [{}]",
+                    exe.display(),
+                    if exe.is_file() { "exists" } else { "missing" }
+                );
+            }
+            if let Some(config) = wotc_config.as_deref().filter(|path| path.is_file()) {
+                match fs::read_to_string(config) {
+                    Ok(text) => println!("Active mods: {}", parse_active_mods(&text).len()),
+                    Err(err) => println!("Active mods: error: {err}"),
+                }
+            }
+            match catalog::load_with_paths(&paths) {
+                Ok(settings) => println!("Catalog mods: {}", settings.all_mods().len()),
+                Err(err) => println!("Catalog mods: error: {err:#}"),
+            }
+        }
+        Err(err) => println!("Paths: error: {err:#}"),
+    }
+
+    println!();
+    println!("Paste this output into your GitHub issue report.");
+}
+
+fn yes_no(value: bool) -> &'static str {
+    if value { "yes" } else { "no" }
 }
 
 fn mod_path(entry: &AmlMod, paths: &SteamPaths) -> (Option<PathBuf>, bool) {
@@ -1110,6 +1238,16 @@ fn main() {
     // Small headless hooks, useful for debugging and for testing the backend
     // without opening a window. They never launch the game.
     let args: Vec<String> = std::env::args().collect();
+
+    if args.iter().any(|arg| arg == "--version" || arg == "-V") {
+        println!("xcom2-mod-launcher {}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
+
+    if args.iter().any(|arg| arg == "--doctor") {
+        print_doctor();
+        return;
+    }
 
     if args.iter().any(|arg| arg == "--headless-auto-categories") {
         match auto_category::preview(false) {

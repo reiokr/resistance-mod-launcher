@@ -1,0 +1,88 @@
+name: Bug report
+description: Report a problem with Resistance Mod Launcher
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing the launcher. Please run `--doctor` from a terminal and paste the output below. It contains no mod contents, only paths, versions and status flags.
+
+        ```bash
+        ./Resistance-Mod-Launcher-*.AppImage --doctor
+        ```
+
+  - type: input
+    id: app-version
+    attributes:
+      label: App version
+      description: Output of `--version`
+      placeholder: xcom2-mod-launcher 0.2.5
+    validations:
+      required: true
+
+  - type: input
+    id: distro
+    attributes:
+      label: Distribution and desktop
+      description: For example CachyOS, KDE Wayland, or SteamOS Game Mode.
+      placeholder: CachyOS, KDE Wayland
+    validations:
+      required: true
+
+  - type: input
+    id: proton
+    attributes:
+      label: Proton version
+      description: Proton, Proton Experimental, Proton-GE or a custom Proton build.
+      placeholder: Proton-CachyOS 11.0
+    validations:
+      required: false
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "--doctor output"
+      description: Run the AppImage with `--doctor` and paste the complete output.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the AppImage
+        2. Go to ...
+        3. Press ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Run the AppImage from a terminal and paste any errors. Screenshots are welcome.
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I am using the latest release AppImage.
+          required: true
+        - label: I closed AML and XCOM 2 before saving or launching.
+          required: false
+        - label: I searched existing issues for the same problem.
+          required: true
