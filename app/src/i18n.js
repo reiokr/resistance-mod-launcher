@@ -3,6 +3,8 @@
 
 export const en = {
 
+  "Keel": "Language",
+
   "Algne kaust on juba olemas. Eemalda see enne taastamist.":
     "The original folder already exists. Remove it before restoring.",
 

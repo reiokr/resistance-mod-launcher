@@ -16,12 +16,20 @@
   let categoryFilter = $state("all");
   let tagFilter = $state("all");
   let tab = $state("mods");
-  let lang = $state(localStorage.getItem("resistance-lang") || "et");
+  function initialLanguage() {
+    const saved = localStorage.getItem("resistance-lang");
+    if (saved === "et" || saved === "en") return saved;
+    const locale =
+      typeof navigator !== "undefined" ? (navigator.language || "").toLowerCase() : "";
+    return locale.startsWith("et") ? "et" : "en";
+  }
+  let lang = $state(initialLanguage());
   const t = (text, vars) => translate(lang, text, vars);
-  function toggleLanguage() {
-    lang = lang === "et" ? "en" : "et";
-    localStorage.setItem("resistance-lang", lang);
-    document.documentElement.lang = lang;
+  function setLanguage(value) {
+    if (value !== "et" && value !== "en") return;
+    lang = value;
+    localStorage.setItem("resistance-lang", value);
+    document.documentElement.lang = value;
   }
   let selectedId = $state(null);
   let details = $state(null);
@@ -100,7 +108,7 @@
   let readmeLoading = $state(false);
   let readmeError = $state("");
   let aboutOpen = $state(false);
-  let appVersion = $state("0.2.5");
+  let appVersion = $state("0.2.6");
 
   onMount(() => {
     document.documentElement.lang = lang;
@@ -1690,11 +1698,16 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
           title={t("Salvesta praegune nimekiri selle profiili sisse")}
         >{t("Salvesta profiil")}</button>
       {/if}
-      <button
-        class="ghost lang"
-        onclick={toggleLanguage}
-        title={lang === "et" ? "Switch to English" : "Lülita eesti keelde"}
-      >{lang === "et" ? "EN" : "ET"}</button>
+      <select
+        class="lang-select"
+        value={lang}
+        onchange={(event) => setLanguage(event.currentTarget.value)}
+        title={t("Keel")}
+        aria-label={t("Keel")}
+      >
+        <option value="en">English</option>
+        <option value="et">Eesti</option>
+      </select>
       <button class="ghost" onclick={load} disabled={loading || busy}>{t("Laadi uuesti")}</button>
       <button class="ghost" onclick={refreshWorkshop} disabled={loading || busy}>
         {t("Värskenda Workshopi")}
@@ -3477,11 +3490,19 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     cursor: help;
   }
 
-  .top-actions .lang {
-    min-width: 42px;
-    padding-left: 8px;
-    padding-right: 8px;
-    font-weight: 700;
+  .top-actions .lang-select {
+    padding: 8px 10px;
+    border-radius: 9px;
+    border: 1px solid #263244;
+    background: #0f151e;
+    color: #cfdae8;
+    outline: none;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .top-actions .lang-select:focus {
+    border-color: #2bb3ff;
   }
 
   button {
