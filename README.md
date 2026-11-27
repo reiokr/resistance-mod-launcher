@@ -16,6 +16,26 @@ Source: <https://github.com/reiokr/resistance-mod-launcher> ·
 [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) ·
 [Third-party notices](THIRD_PARTY_NOTICES.md)
 
+## Download
+
+The latest AppImage is available on the
+[Releases page](https://github.com/reiokr/resistance-mod-launcher/releases/latest).
+
+1. Download `Resistance-Mod-Launcher-<version>-x86_64.AppImage`.
+2. Make it executable:
+
+   ```bash
+   chmod +x Resistance-Mod-Launcher-<version>-x86_64.AppImage
+   ```
+
+3. Run it:
+
+   ```bash
+   ./Resistance-Mod-Launcher-<version>-x86_64.AppImage
+   ```
+
+SHA-256 checksums are attached to every release as `SHA256SUMS`.
+
 ## What works
 
 The `aml-preview` binary:
