@@ -2,6 +2,116 @@
 // A missing key falls back to the Estonian text, so new strings are safe.
 
 export const en = {
+  "Lihtvaade": "Simple view",
+  "Ava lihtvaade: ainult profiilid ja Start":
+    "Open simple view: profiles and Start only",
+  "Modpack on valmis.": "Your modpack is ready.",
+  "Lihtvaates näed ainult profiile ja Start-nuppu — profiili vahetamine käib ühe klikiga.":
+    "The simple view shows only your profiles and the Start button — switching profiles takes one click.",
+  "Ava lihtvaade": "Open simple view",
+  "Ära näita uuesti": "Don't show again",
+
+  "soovitatud": "recommended",
+
+  "Profiilis „{name}” on salvestamata muudatused. Kas jätkata ja kaotada need?":
+    "Profile \"{name}\" has unsaved changes. Continue and discard them?",
+  "Modide muutmiseks vajuta profiilikaardil „Muuda modisid”. Lülita Modid-tabis modid sisse või välja ja vajuta „Salvesta profiil”. Seejärel vajuta „Salvesta”, et nimekiri mängu configusse läheks.":
+    "To change mods, press \"Edit mods\" on the profile card. Toggle mods in the Mods tab and press \"Save profile\". Then press \"Save\" to write the list to the game config.",
+
+
+  "Lisa modisid": "Add mods",
+  "Loo profiil kollektsioonist, praegusest nimekirjast või tühjalt.":
+    "Create a profile from a collection, the current list, or empty.",
+  "Muuda modisid": "Edit mods",
+  "Muudad profiili „{name}”.": "You are editing profile \"{name}\".",
+  "Muudatused lähevad profiili alles „Salvesta profiil” vajutamisel.":
+    "Changes are saved to the profile only when you press Save profile.",
+  "Muutmine lõpetatud.": "Editing finished.",
+  "Praegune aktiivne nimekiri ({count} modi)":
+    "Current active list ({count} mods)",
+  "Profiil loodud praegusest nimekirjast: {name}":
+    "Profile created from the current list: {name}",
+  "Profiil luuakse praegusest aktiivsest nimekirjast ({count} modi).":
+    "The profile will be created from the current active list ({count} mods).",
+  "Profiil on tühi. Vajuta „Lisa modisid”.":
+    "This profile is empty. Press \"Add mods\".",
+  "Salvesta praegune profiilina ({count})":
+    "Save current as profile ({count})",
+  "Salvestan praegust nimekirja profiilina…":
+    "Saving the current list as a profile…",
+  "Selle nimega profiil on juba olemas. Vali teine nimi.":
+    "A profile with this name already exists. Choose another name.",
+  "Tühi profiil (advanced)": "Empty profile (advanced)",
+  "Tühi profiil on mõeldud edasijõudnutele. Modisid saab hiljem lisada „Muuda modisid” kaudu.":
+    "An empty profile is for advanced users. Mods can be added later via \"Edit mods\".",
+  "Tühista muudatused": "Discard changes",
+  "Tühista profiili „{name}” salvestamata muudatused?":
+    "Discard unsaved changes for profile \"{name}\"?",
+
+  "Käivita mäng": "Launch your Game",
+
+  "Eemalda pilt": "Remove picture",
+  "Eemalda profiili „{name}” pilt?": "Remove the picture for profile \"{name}\"?",
+  "Eemaldan profiilipilti…": "Removing profile picture…",
+  "Lisa pilt": "Add picture",
+  "Lisan profiilipilti…": "Adding profile picture…",
+  "Muuda pilti": "Change picture",
+  "Pilt": "Image",
+  "Profiilipilt eemaldatud: {name}": "Profile picture removed: {name}",
+  "Profiilipilt lisatud: {name}": "Profile picture added: {name}",
+
+  "Lülita lihtvaatesse": "Switch to simple mode",
+
+  "AML on lahti. Sulge AML enne käivitamist.":
+    "AML is open. Close AML before launching.",
+  "Ava täisvaade": "Open advanced view",
+  "Ava täisvaade, et profiil luua või Steam Workshopi kollektsioon importida.":
+    "Open the advanced view to create a profile or import a Steam Workshop collection.",
+  "Halda profiile": "Manage profiles",
+  "Kontroll on aegunud või veel tegemata.":
+    "The check is stale or has not been run yet.",
+  "Kontrolli enne käivitamist": "Check before launching",
+  "Kontrollin olekut…": "Checking runtime status…",
+  "Kontrollitud: {time}": "Checked: {time}",
+  "Käivitan…": "Launching…",
+  "Lihtne": "Simple",
+  "Seejärel saad profiili info ja Start-nupu.":
+    "You will then see the profile info and the Start button.",
+  "Selles profiilis on {count} kollektsiooni modi, mis pole veel paigaldatud.":
+    "This profile has {count} collection mods that are not installed yet.",
+  "Selles profiilis on {count} puuduvat aktiivset modi. Kas käivitada ikkagi?":
+    "This profile has {count} missing active mods. Launch anyway?",
+  "Selles profiilis on {count} puuduvat aktiivset modi. Start küsib enne kinnitust.":
+    "This profile has {count} missing active mods. Start will ask for confirmation.",
+  "Start rakendab ja salvestab selle profiili mängu configusse enne käivitamist.":
+    "Start applies and saves this profile to the game config before launching.",
+  "Steam ei tööta. Käivita Steam ja proovi uuesti.":
+    "Steam is not running. Start Steam and try again.",
+  "Sul pole veel profiile.": "You do not have any profiles yet.",
+  "Täisvaade": "Advanced",
+  "Vaade": "View",
+  "Vali modpack": "Choose a modpack",
+  "Vali profiil ja vajuta Start. Launcher rakendab ja salvestab profiili enne käivitamist.":
+    "Choose a profile and press Start. The launcher applies and saves the profile before launching.",
+  "Vali ülal profiil.": "Choose a profile above.",
+  "Valmis mängima": "Ready to play",
+  "XCOM 2 töötab juba.": "XCOM 2 is already running.",
+  "ootab": "pending",
+  "profiili modi": "profile mods",
+
+  "Näita puuduvaid aktiivseid modisid": "Show missing active mods",
+
+  "Aktiivne nimekiri on muudetud.": "The active list has been changed.",
+  "Aktiivne nimekiri on veel mängu configusse salvestamata. Kas salvestada enne käivitamist?\n\nOK = salvesta ja käivita\nCancel = katkesta":
+    "The active list has not been saved to the game config yet. Save it before launching?\n\nOK = save and launch\nCancel = cancel",
+  "Kirjuta aktiivne nimekiri XComModOptions.ini faili":
+    "Write the active list to XComModOptions.ini",
+  "Mängu config on veel vana. Salvesta see enne käivitamist.":
+    "The game config is still unchanged. Save it before launching.",
+  "Profiil „{name}” on rakendatud.": "Profile \"{name}\" is applied.",
+  "Salvesta config": "Save config",
+  "Salvesta mängu config": "Save game config",
+  "Vaata kontrolli": "View checks",
 
   "Kontroll käib juba, oota…": "A check is already running, please wait…",
 

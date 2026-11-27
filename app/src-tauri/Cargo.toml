@@ -1,6 +1,6 @@
 [package]
 name = "xcom2-mod-launcher"
-version = "0.2.7"
+version = "0.3.0"
 description = "Native Linux mod launcher for XCOM 2"
 edition = "2024"
 license = "GPL-3.0-only"
@@ -10,6 +10,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 anyhow = "1"
+base64 = "0.22"
 encoding_rs = "0.8"
 rayon = "1"
 regex = "1"

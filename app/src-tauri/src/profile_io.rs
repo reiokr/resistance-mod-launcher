@@ -326,6 +326,7 @@ fn build_profile(
         pending_workshop_ids,
         excluded_workshop_ids: file.profile.excluded_workshop_ids.clone(),
         deactivated_mod_ids,
+        cover_image: None,
         updated: now(),
     };
     (profile, missing_count)
@@ -525,7 +526,7 @@ mod tests {
             format: FORMAT.to_string(),
             version: VERSION,
             exported_at: 1,
-            app_version: "0.2.7".to_string(),
+            app_version: "0.3.0".to_string(),
             game: GAME.to_string(),
             workshop_app_id: APP_ID,
             profile: ProfileData {

@@ -48,6 +48,8 @@ pub struct Profile {
     pub excluded_workshop_ids: Vec<u64>,
     #[serde(default)]
     pub deactivated_mod_ids: Vec<String>,
+    #[serde(default)]
+    pub cover_image: Option<String>,
     pub updated: i64,
 }
 
@@ -81,12 +83,14 @@ pub struct CategoryView {
 pub struct ProfileView {
     pub name: String,
     pub description: Option<String>,
+    pub active_ids: Vec<String>,
     pub count: usize,
     pub pending_count: usize,
     pub source_title: Option<String>,
     pub source_id: Option<u64>,
     pub source_url: Option<String>,
     pub deactivated_mod_ids: Vec<String>,
+    pub cover_image: Option<String>,
     pub updated: i64,
 }
 
@@ -219,12 +223,14 @@ pub fn profile_views(state: &PersistedState) -> Vec<ProfileView> {
         .map(|profile| ProfileView {
             name: profile.name.clone(),
             description: profile.description.clone(),
+            active_ids: profile.active_ids.clone(),
             count: profile.active_ids.len(),
             pending_count: profile.pending_workshop_ids.len(),
             source_title: profile.source.as_ref().map(|source| source.title.clone()),
             source_id: profile.source.as_ref().map(|source| source.id),
             source_url: profile.source.as_ref().map(|source| source.url.clone()),
             deactivated_mod_ids: profile.deactivated_mod_ids.clone(),
+            cover_image: profile.cover_image.clone(),
             updated: profile.updated,
         })
         .collect();
@@ -385,6 +391,7 @@ pub fn save_profile(state: &mut PersistedState, name: &str, active_ids: Vec<Stri
             pending_workshop_ids: Vec::new(),
             excluded_workshop_ids: Vec::new(),
             deactivated_mod_ids: Vec::new(),
+            cover_image: None,
             updated,
         });
     }
@@ -543,6 +550,7 @@ mod tests {
                 pending_workshop_ids: vec![2, 3],
                 excluded_workshop_ids: Vec::new(),
                 deactivated_mod_ids: Vec::new(),
+                cover_image: None,
                 updated: 0,
             },
         )
@@ -559,6 +567,7 @@ mod tests {
                     pending_workshop_ids: Vec::new(),
                     excluded_workshop_ids: Vec::new(),
                     deactivated_mod_ids: Vec::new(),
+                    cover_image: None,
                     updated: 0,
                 }
             )
@@ -608,6 +617,7 @@ mod tests {
                 pending_workshop_ids: Vec::new(),
                 excluded_workshop_ids: Vec::new(),
                 deactivated_mod_ids: Vec::new(),
+                cover_image: None,
                 updated: 0,
             },
         )

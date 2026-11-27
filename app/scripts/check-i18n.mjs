@@ -1,23 +1,31 @@
 import fs from "node:fs";
 import { en } from "../src/i18n.js";
 
-const source = fs.readFileSync(new URL("../src/App.svelte", import.meta.url), "utf8");
+const srcDir = new URL("../src/", import.meta.url);
+const files = fs
+  .readdirSync(srcDir)
+  .filter((file) => file.endsWith(".svelte"))
+  .sort();
+
 const re = /\bt\("((?:[^"\\]|\\.)*)"/g;
 const missing = new Set();
 const keys = new Set();
-let match;
 let calls = 0;
 
-while ((match = re.exec(source))) {
-  calls++;
-  let key;
-  try {
-    key = JSON.parse(`"${match[1]}"`);
-  } catch {
-    key = match[1];
+for (const file of files) {
+  const source = fs.readFileSync(new URL(file, srcDir), "utf8");
+  let match;
+  while ((match = re.exec(source))) {
+    calls++;
+    let key;
+    try {
+      key = JSON.parse(`"${match[1]}"`);
+    } catch {
+      key = match[1];
+    }
+    keys.add(key);
+    if (!(key in en)) missing.add(key);
   }
-  keys.add(key);
-  if (!(key in en)) missing.add(key);
 }
 
 if (missing.size > 0) {

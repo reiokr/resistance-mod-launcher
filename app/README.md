@@ -2,7 +2,7 @@
 
 Native Linux UI for the `xcom2-launcher-core` crate.
 
-Status: **MVP**, tested against a 792-mod / 790-active War of the Chosen
+Status: **V3**, tested against a 792-mod / 790-active War of the Chosen
 install.
 
 ## Before you start
@@ -226,14 +226,23 @@ cargo run -- --headless-diagnostics
 
 ## UI
 
+- **Two UI modes.** Advanced is the default and exposes mod management,
+  profiles, load order, categories, diagnostics and config editing. Simple
+  shows only profile cards and the Start button; open it with **Simple view**
+  in the top bar or the footer. The mode is remembered. Simple Start applies
+  and saves the selected profile before launching. Once a profile is configured,
+  the Profiles tab offers the simple view once with a dismissible hint.
 - **Modid** tab: all 792 mods; checkbox toggles active state; click a row for
   details. Filters: status, native category, and Workshop tag (tags used by at
   least two mods). Search also matches Workshop tags.
 - **Laadimisjärjekord** tab: active mods in load order; drag rows or use ↑/↓.
-- **Profiilid** tab: create an empty profile or import a Steam Workshop
-  collection. Existing collection mods are selected by default (uncheck as
-  needed); missing mods stay visible with Steam links. Profile cards show the
-  collection source, description and pending count.
+- **Profiilid** tab: create a profile from a Steam Workshop collection
+  (default), from the current active list, or empty (advanced). Existing
+  collection mods are selected by default (uncheck as needed); missing mods
+  stay visible with Steam links. Profile cards show the collection source,
+  description, pending count and an optional custom cover image.
+  **Muuda modisid** applies the profile and opens the Mods tab with an editing
+  banner; **Salvesta profiil** writes the changes back to that profile.
 - **Profile picker** in the top bar: selecting a profile applies its active
   list/order immediately, runs the conflict check, and marks the profile as
   current. A yellow dot means the current list differs from the saved profile.

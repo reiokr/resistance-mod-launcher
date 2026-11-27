@@ -22,6 +22,7 @@ mod catalog;
 mod category_learning;
 mod cleanup;
 mod config_editor;
+mod covers;
 mod diagnostics;
 mod mod_paths;
 mod profile_io;
@@ -37,6 +38,7 @@ struct ModView {
     category: String,
     workshop_id: Option<u64>,
     workshop_tags: Vec<String>,
+    preview_url: Option<String>,
     manual_category: bool,
     active: bool,
     order: Option<usize>,
@@ -204,6 +206,161 @@ fn print_path(label: &str, path: &Option<PathBuf>) {
     }
 }
 
+fn windows_drive(value: &str) -> Option<char> {
+    let bytes = value.as_bytes();
+    if bytes.len() < 3 || bytes[1] != b':' || !(bytes[2] == b'\\' || bytes[2] == b'/') {
+        return None;
+    }
+    let drive = bytes[0] as char;
+    drive
+        .is_ascii_alphabetic()
+        .then(|| drive.to_ascii_lowercase())
+}
+
+fn doctor_shell_path(path: &Path) -> String {
+    let text = path.display().to_string();
+    if !text.is_empty()
+        && text
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '/' | '.' | '_' | '-'))
+    {
+        text
+    } else {
+        format!("'{}'", text.replace('\'', "'\\''"))
+    }
+}
+
+fn mod_root_dirs(text: &str) -> Vec<String> {
+    text.lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with(';') || line.starts_with('#') {
+                return None;
+            }
+            let (key, value) = line.split_once('=')?;
+            let key = key.trim().trim_start_matches('+');
+            if key != "ModRootDirs" && !key.starts_with("ModRootDirs[") {
+                return None;
+            }
+            let value = value.trim().trim_matches('"');
+            (!value.is_empty()).then(|| value.to_string())
+        })
+        .collect()
+}
+
+fn canonical_or_self(path: &Path) -> PathBuf {
+    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn print_mod_root_check(paths: &SteamPaths) {
+    let Some(config_dir) = paths.wotc_config.as_deref() else {
+        return;
+    };
+    let engine = config_dir.join("XComEngine.ini");
+    if !engine.is_file() {
+        println!("Workshop drive mapping: XComEngine.ini missing");
+        return;
+    }
+    let text = match fs::read_to_string(&engine) {
+        Ok(text) => text,
+        Err(err) => {
+            println!("Workshop drive mapping: error reading XComEngine.ini: {err}");
+            return;
+        }
+    };
+    let roots = mod_root_dirs(&text);
+    if roots.is_empty() {
+        println!("Workshop drive mapping: ModRootDirs is not set");
+        return;
+    }
+
+    for raw in roots {
+        println!("ModRootDirs: {raw}");
+        let Some(drive) = windows_drive(&raw) else {
+            println!("  WARN: path does not start with a Windows drive; cannot verify");
+            continue;
+        };
+        let Some(prefix) = paths.prefix.as_deref() else {
+            println!("  WARN: Proton prefix not found; cannot verify {drive}:");
+            continue;
+        };
+        let dosdevices = prefix.join("dosdevices");
+        let link = dosdevices.join(format!("{drive}:"));
+        let target = fs::read_link(&link)
+            .ok()
+            .map(|target| {
+                if target.is_absolute() {
+                    target
+                } else {
+                    dosdevices.join(target)
+                }
+            })
+            .or_else(|| link.is_dir().then(|| link.clone()));
+        let Some(target) = target else {
+            println!(
+                "  WARN: {drive}: is missing in {}{}",
+                dosdevices.display(),
+                if drive == 'z' {
+                    " (normally maps to /)"
+                } else {
+                    ""
+                }
+            );
+            if let Some(workshop) = paths.workshop_dir.as_deref() {
+                println!("        Launcher workshop dir: {}", workshop.display());
+            }
+            let target = if drive == 'z' {
+                Some(PathBuf::from("/"))
+            } else {
+                paths.library.clone()
+            };
+            if let Some(target) = target {
+                println!(
+                    "        Fix: ln -sfn {} {}",
+                    doctor_shell_path(&target),
+                    doctor_shell_path(&link)
+                );
+            }
+            println!();
+            continue;
+        };
+
+        println!(
+            "  {drive}: -> {} [{}]",
+            target.display(),
+            if target.is_dir() { "ok" } else { "missing" }
+        );
+        let mapped = map_windows_path(&raw, Some(prefix));
+        if let Some(mapped) = mapped.as_deref() {
+            println!(
+                "  Workshop via {drive}: {} [{}]",
+                mapped.display(),
+                if mapped.is_dir() { "ok" } else { "missing" }
+            );
+            if let Some(expected) = paths.workshop_dir.as_deref()
+                && canonical_or_self(mapped) != canonical_or_self(expected)
+            {
+                println!("  WARN: game and launcher use different Workshop directories");
+                println!("        game:     {}", mapped.display());
+                println!("        launcher: {}", expected.display());
+                let target = if drive == 'z' {
+                    Some(PathBuf::from("/"))
+                } else {
+                    paths.library.clone()
+                };
+                if let Some(target) = target {
+                    println!(
+                        "        Fix: ln -sfn {} {}",
+                        doctor_shell_path(&target),
+                        doctor_shell_path(&link)
+                    );
+                }
+            }
+        }
+        println!();
+    }
+}
+
 fn print_doctor() {
     println!("Resistance Mod Launcher {}", env!("CARGO_PKG_VERSION"));
     println!(
@@ -274,6 +431,7 @@ fn print_doctor() {
                 Ok(settings) => println!("Catalog mods: {}", settings.all_mods().len()),
                 Err(err) => println!("Catalog mods: error: {err:#}"),
             }
+            print_mod_root_check(&paths);
         }
         Err(err) => println!("Paths: error: {err:#}"),
     }
@@ -287,22 +445,14 @@ fn yes_no(value: bool) -> &'static str {
 }
 
 fn mod_path(entry: &AmlMod, paths: &SteamPaths) -> (Option<PathBuf>, bool) {
-    if let Some(id) = entry.workshop_id.filter(|id| *id > 0) {
-        if let Some(workshop) = &paths.workshop_dir {
-            let candidate = workshop.join(id.to_string());
-            if candidate.exists() {
-                return (Some(candidate), false);
-            }
-        }
+    if let Some(path) = crate::mod_paths::entry_path(entry, paths) {
+        return (Some(path), false);
     }
-
     if let Some(raw) = &entry.path {
         if let Some(mapped) = map_windows_path(raw, paths.prefix.as_deref()) {
-            let missing = !mapped.exists();
-            return (Some(mapped), missing);
+            return (Some(mapped), true);
         }
     }
-
     (None, true)
 }
 
@@ -374,6 +524,9 @@ fn load_snapshot() -> Result<AppSnapshot> {
             .and_then(|id| cache.items.get(&id.to_string()))
             .map(|details| details.tags.clone())
             .unwrap_or_default();
+        let preview_url = workshop_id
+            .and_then(|id| cache.items.get(&id.to_string()))
+            .and_then(|details| details.preview_url.clone());
         let category = app_state
             .mod_categories
             .get(&entry.id)
@@ -387,6 +540,7 @@ fn load_snapshot() -> Result<AppSnapshot> {
             category,
             workshop_id,
             workshop_tags,
+            preview_url,
             manual_category: app_state.category_feedback.contains_key(&entry.id),
             active: order.is_some(),
             order,
@@ -773,6 +927,58 @@ fn get_mod_readme(mod_id: String) -> Result<readme::ReadmeContent, String> {
     readme::read(&mod_id).map_err(|err| format!("{err:#}"))
 }
 
+#[derive(Debug, Serialize)]
+struct RuntimeStatus {
+    steam_running: bool,
+    aml_running: bool,
+    game_running: bool,
+}
+
+#[tauri::command]
+async fn list_profile_covers() -> Result<Vec<covers::ProfileCover>, String> {
+    tauri::async_runtime::spawn_blocking(covers::list)
+        .await
+        .map_err(|err| format!("Cover task failed: {err}"))?
+        .map_err(|err| format!("{err:#}"))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+async fn set_profile_cover(name: String, path: String) -> Result<covers::ProfileCover, String> {
+    tauri::async_runtime::spawn_blocking(move || covers::set(&name, &path))
+        .await
+        .map_err(|err| format!("Cover task failed: {err}"))?
+        .map_err(|err| format!("{err:#}"))
+}
+
+#[tauri::command]
+async fn clear_profile_cover(name: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || covers::clear(&name))
+        .await
+        .map_err(|err| format!("Cover task failed: {err}"))?
+        .map_err(|err| format!("{err:#}"))
+}
+
+#[tauri::command]
+fn runtime_status() -> RuntimeStatus {
+    RuntimeStatus {
+        steam_running: steam_running(),
+        aml_running: aml_running(),
+        game_running: game_running(),
+    }
+}
+
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    if !url.starts_with("https://") && !url.starts_with("http://") {
+        return Err("Only http(s) links are allowed.".to_string());
+    }
+    Command::new("xdg-open")
+        .arg(&url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|err| format!("Could not open link: {err}"))
+}
+
 #[tauri::command]
 fn open_workshop(id: u64) -> Result<(), String> {
     let url = format!("https://steamcommunity.com/sharedfiles/filedetails/?id={id}");
@@ -958,6 +1164,7 @@ fn create_empty_profile(name: String, description: Option<String>) -> Result<Str
         pending_workshop_ids: Vec::new(),
         excluded_workshop_ids: Vec::new(),
         deactivated_mod_ids: Vec::new(),
+        cover_image: None,
         updated: now_unix(),
     };
     state::create_profile(&mut app_state, profile).map_err(|err| format!("{err:#}"))?;
@@ -1060,6 +1267,7 @@ fn create_profile_from_collection_impl(
             pending_workshop_ids,
             excluded_workshop_ids,
             deactivated_mod_ids: Vec::new(),
+            cover_image: None,
             updated: now_unix(),
         },
     )?;
@@ -1416,6 +1624,51 @@ fn main() {
         return;
     }
 
+    if args.iter().any(|arg| arg == "--headless-list-covers") {
+        match covers::list() {
+            Ok(entries) => {
+                for entry in entries {
+                    println!("{}\t{}", entry.name, entry.data_url.len());
+                }
+            }
+            Err(err) => {
+                eprintln!("{err:#}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    if let Some(index) = args.iter().position(|arg| arg == "--headless-set-cover") {
+        let (Some(name), Some(path)) = (args.get(index + 1), args.get(index + 2)) else {
+            eprintln!("Usage: --headless-set-cover <profile> <image>");
+            std::process::exit(2);
+        };
+        match covers::set(name, path) {
+            Ok(entry) => println!("{} {}", entry.name, entry.data_url.len()),
+            Err(err) => {
+                eprintln!("{err:#}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    if let Some(index) = args.iter().position(|arg| arg == "--headless-clear-cover") {
+        let Some(name) = args.get(index + 1) else {
+            eprintln!("Usage: --headless-clear-cover <profile>");
+            std::process::exit(2);
+        };
+        match covers::clear(name) {
+            Ok(()) => println!("cleared {name}"),
+            Err(err) => {
+                eprintln!("{err:#}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
     if args.iter().any(|arg| arg == "--headless-mod-trash") {
         match cleanup::list_mod_trash() {
             Ok(entries) => println!("{entries:#?}"),
@@ -1651,6 +1904,11 @@ fn main() {
             scan_diagnostics,
             get_mod_details,
             get_mod_readme,
+            list_profile_covers,
+            set_profile_cover,
+            clear_profile_cover,
+            runtime_status,
+            open_url,
             open_workshop,
             set_mod_category,
             create_category,
@@ -1685,4 +1943,35 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running the Tauri application");
+}
+
+#[cfg(test)]
+mod doctor_tests {
+    use super::*;
+
+    #[test]
+    fn detects_windows_drive_paths() {
+        assert_eq!(windows_drive(r"S:\steamapps\workshop"), Some('s'));
+        assert_eq!(windows_drive("Z:/mnt/steam"), Some('z'));
+        assert_eq!(windows_drive(r"\steamapps"), None);
+        assert_eq!(windows_drive("/mnt/steam"), None);
+    }
+
+    #[test]
+    fn parses_mod_root_dir_variants() {
+        let text = "\
+[Core.System]\n\
+; ModRootDirs=S:\\commented\n\
+ModRootDirs=S:\\steamapps\\workshop\\content\\268500\\\n\
++ModRootDirs=\"Z:\\mnt\\steam\\\"\n\
+ModRootDirs[1]=D:\\games\\xcom\n";
+        assert_eq!(
+            mod_root_dirs(text),
+            vec![
+                r"S:\steamapps\workshop\content\268500\".to_string(),
+                r"Z:\mnt\steam\".to_string(),
+                r"D:\games\xcom".to_string(),
+            ]
+        );
+    }
 }

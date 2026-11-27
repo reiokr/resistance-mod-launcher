@@ -7,9 +7,11 @@ Native Linux core and desktop app for XCOM 2 mod management. This is an
 independent Tauri 2 + Svelte 5 implementation that runs natively on Linux and
 manages the Windows/Proton install without Wine.
 
-**Status: core + Tauri 2 MVP.** The core CLI is read-only; the Tauri app can
-save `XComModOptions.ini` with a backup and launch WotC. The UI is available in
-Estonian and English. See [`app/README.md`](app/README.md).
+**Status: core + Tauri 2 app (V3).** The core CLI is read-only; the Tauri app
+can save `XComModOptions.ini` with a backup and launch WotC. It includes
+Advanced and Simple UI modes, profile covers, profile creation from the current
+list or a Steam Workshop collection, and one-click profile switching. The UI is
+available in Estonian and English. See [`app/README.md`](app/README.md).
 
 Source: <https://github.com/reiokr/resistance-mod-launcher> ·
 [Releases](https://github.com/reiokr/resistance-mod-launcher/releases) ·
@@ -72,6 +74,10 @@ SHA-256 checksums are attached to every release as `SHA256SUMS`.
 - **Save is blocked?** Close AML or XCOM 2.
 - **Dependencies look incomplete?** Install AML or import its `settings.json`
   once.
+- **Game crashes right after launch?** Run `--doctor`. It compares the
+  `ModRootDirs` drive in `XComEngine.ini` (usually `S:`) with the Workshop
+  folder the launcher uses. If they differ, it prints the exact `ln -sfn`
+  command that repoints the Proton drive.
 
 ### Diagnosing startup problems
 
@@ -81,7 +87,10 @@ Run the AppImage from a terminal:
 ./Resistance-Mod-Launcher-*.AppImage --doctor
 ```
 
-Paste the output into a GitHub issue. `--version` prints the launcher version.
+Paste the output into a GitHub issue. The doctor also verifies that the
+game's `ModRootDirs` drive points to the same Workshop folder as the launcher,
+and suggests the `ln -sfn` fix when a Steam library has moved. `--version`
+prints the launcher version.
 If the AppImage does not start at all, include the terminal error and try
 `APPIMAGE_EXTRACT_AND_RUN=1 ./Resistance-Mod-Launcher-*.AppImage --doctor` to
 rule out FUSE.
@@ -208,6 +217,13 @@ With the current 790 active mods the first save is
 `unchanged: true` (byte-identical). The launch command checks that Steam is
 running and runs the optional
 `~/.config/xcom2-launcher-linux/prelaunch` hook before starting the game.
+
+The UI has two modes. **Advanced** is the default and exposes the mod list,
+load order, profiles, categories, diagnostics and config editing. **Simple**
+shows only the profile cards and the Start button for day-to-day modpack
+switching; open it with **Simple view** in the top bar or the footer. The mode
+is remembered. Once a profile is configured, the Profiles tab offers the simple
+view once with a dismissible hint.
 
 The UI ships with Estonian and English translations. The `EN`/`ET` button in
 the top bar switches languages; the choice is stored locally.

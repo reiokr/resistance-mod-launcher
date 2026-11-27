@@ -4,6 +4,7 @@
   import { getVersion } from "@tauri-apps/api/app";
   import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
   import { translate } from "./i18n.js";
+  import SimpleMode from "./SimpleMode.svelte";
 
   let snapshot = $state(null);
   let loading = $state(true);
@@ -22,6 +23,32 @@
     const locale =
       typeof navigator !== "undefined" ? (navigator.language || "").toLowerCase() : "";
     return locale.startsWith("et") ? "et" : "en";
+  }
+  function initialUiMode() {
+    const saved = localStorage.getItem("resistance-ui-mode");
+    return saved === "simple" || saved === "advanced" ? saved : "advanced";
+  }
+  const initialMode = initialUiMode();
+  let uiMode = $state(initialMode);
+  let simpleUsed = $state(
+    localStorage.getItem("resistance-simple-used") === "1" ||
+      initialMode === "simple"
+  );
+  let simpleHintDismissed = $state(
+    localStorage.getItem("resistance-simple-hint-dismissed") === "1"
+  );
+  function setUiMode(mode) {
+    if (mode !== "simple" && mode !== "advanced") return;
+    uiMode = mode;
+    localStorage.setItem("resistance-ui-mode", mode);
+    if (mode === "simple") {
+      simpleUsed = true;
+      localStorage.setItem("resistance-simple-used", "1");
+    }
+  }
+  function dismissSimpleHint() {
+    simpleHintDismissed = true;
+    localStorage.setItem("resistance-simple-hint-dismissed", "1");
   }
   let lang = $state(initialLanguage());
   let diagnosticsSignature = $state(null);
@@ -45,6 +72,8 @@
   let selectedId = $state(null);
   let details = $state(null);
   let activeOrder = $state([]);
+  let savedActiveIds = $state([]);
+  let profileCovers = $state({});
   let dragId = $state(null);
   let newCategory = $state("");
   let editingCategory = $state(null);
@@ -59,7 +88,7 @@
         activeOrder.some((id, index) => id !== profileBaseline[index]))
   );
   let profileModalOpen = $state(false);
-  let profileMode = $state("empty");
+  let profileMode = $state("collection");
   let profileDraftName = $state("");
   let profileDraftDescription = $state("");
   let collectionInput = $state("");
@@ -68,6 +97,7 @@
   let collectionError = $state("");
   let collectionSelected = $state(new Set());
   let collectionIncludePending = $state(true);
+  let editingProfile = $state(null);
   let profileCollectionOpen = $state(false);
   let profileCollectionName = $state("");
   let profileCollectionPreview = $state(null);
@@ -119,7 +149,7 @@
   let readmeLoading = $state(false);
   let readmeError = $state("");
   let aboutOpen = $state(false);
-  let appVersion = $state("0.2.7");
+  let appVersion = $state("0.3.0");
 
   onMount(() => {
     document.documentElement.lang = lang;
@@ -142,6 +172,8 @@
     try {
       snapshot = await invoke("get_state");
       activeOrder = [...snapshot.active_ids];
+      savedActiveIds = [...snapshot.active_ids];
+      await refreshProfileCovers();
       const remembered = localStorage.getItem("resistance-current-profile");
       const rememberedIds = localStorage.getItem("resistance-current-profile-ids");
       const rememberedValid =
@@ -167,6 +199,19 @@
     }
   }
 
+  const gameConfigDirty = $derived(
+    activeOrder.length !== savedActiveIds.length ||
+      activeOrder.some((id, index) => id !== savedActiveIds[index])
+  );
+  const showSimpleHint = $derived(
+    uiMode === "advanced" &&
+      tab === "profiles" &&
+      !!snapshot &&
+      !simpleHintDismissed &&
+      !simpleUsed &&
+      !gameConfigDirty &&
+      snapshot.profiles.some((profile) => profile.count > 0)
+  );
   const modsById = $derived(new Map((snapshot?.mods ?? []).map((mod) => [mod.id, mod])));
   const activeMods = $derived(
     activeOrder.map((id) => modsById.get(id)).filter(Boolean)
@@ -267,7 +312,7 @@
     return (snapshot?.mods ?? []).filter((mod) => {
       if (stateFilter === "active" && !mod.active) return false;
       if (stateFilter === "inactive" && mod.active) return false;
-      if (stateFilter === "missing" && !mod.missing) return false;
+      if (stateFilter === "missing" && (!mod.missing || !mod.active)) return false;
       if (stateFilter === "updates" && !mod.update_available) return false;
       if (categoryFilter !== "all" && mod.category !== categoryFilter) return false;
       if (tagFilter !== "all" && !(mod.workshop_tags ?? []).some(
@@ -291,6 +336,9 @@
       mod.order = index >= 0 ? index : null;
     }
     snapshot.summary.active = activeOrder.length;
+    snapshot.summary.missing = snapshot.mods.filter(
+      (mod) => mod.active && mod.missing
+    ).length;
   }
 
   let deactivationQueue = Promise.resolve();
@@ -382,6 +430,7 @@
     message = "";
     try {
       const result = await invoke("save_state", { active_ids: activeOrder });
+      savedActiveIds = [...activeOrder];
       rememberSavedProfile(currentProfile, [...activeOrder]);
       if (snapshot) {
         snapshot.summary.active = result.active_count;
@@ -402,6 +451,14 @@
   }
 
   async function launch() {
+    if (gameConfigDirty) {
+      const ok = window.confirm(
+        t("Aktiivne nimekiri on veel mängu configusse salvestamata. Kas salvestada enne käivitamist?\n\nOK = salvesta ja käivita\nCancel = katkesta")
+      );
+      if (!ok) return;
+      await save();
+      if (error) return;
+    }
     busy = true;
     busyText = t("Käivitan XCOM 2…");
     error = "";
@@ -625,7 +682,7 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
 
   function openProfileModal() {
     profileModalOpen = true;
-    profileMode = "empty";
+    profileMode = "collection";
     profileDraftName = "";
     profileDraftDescription = "";
     collectionInput = "";
@@ -712,6 +769,40 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     }
     error = "";
     collectionError = "";
+    if (profileMode === "current") {
+      const name = profileDraftName.trim();
+      if (snapshot?.profiles.some((profile) => profile.name === name)) {
+        collectionError = t("Selle nimega profiil on juba olemas. Vali teine nimi.");
+        return;
+      }
+      busy = true;
+      busyText = t("Salvestan praegust nimekirja profiilina…");
+      const currentIds = [...activeOrder];
+      try {
+        await invoke("create_empty_profile", {
+          name,
+          description: profileDraftDescription.trim() || null,
+        });
+        await invoke("save_profile", {
+          name,
+          active_ids: currentIds,
+        });
+        profileModalOpen = false;
+        await load();
+        activeOrder = currentIds;
+        currentProfile = name;
+        profileBaseline = [...currentIds];
+        syncOrderFields();
+        tab = "profiles";
+        message = t("Profiil loodud praegusest nimekirjast: {name}", { name });
+      } catch (err) {
+        collectionError = String(err);
+      } finally {
+        busy = false;
+        busyText = "";
+      }
+      return;
+    }
     if (profileMode === "collection") {
       if (!collectionPreview) {
         collectionError = t("Laadi enne kollektsioon.");
@@ -1122,6 +1213,7 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
           profile.updated = Math.floor(Date.now() / 1000);
         }
       }
+      editingProfile = null;
       message = t("Profiil salvestatud: {name}", { name });
     } catch (err) {
       error = String(err);
@@ -1177,6 +1269,7 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
   }
 
   async function applyProfile(name, skipConfirm = false) {
+    editingProfile = null;
     if (
       !skipConfirm &&
       currentProfile &&
@@ -1231,9 +1324,36 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
           scanNote = " " + t("Konfliktikontroll ebaõnnestus.");
         }
       }
-      message =
-        t("Profiil \"{name}\" rakendatud. Vajuta Salvesta, et see mängu configusse kirjutada.", { name }) +
-        scanNote;
+      message = scanNote.trim();
+    } catch (err) {
+      error = String(err);
+    } finally {
+      busy = false;
+      busyText = "";
+    }
+  }
+
+  async function applyProfileForSimple(name) {
+    if (busy) return;
+    busy = true;
+    busyText = t("Rakendan profiili…");
+    error = "";
+    message = "";
+    try {
+      const profileView = snapshot?.profiles.find(
+        (entry) => entry.name === name
+      );
+      const deactivated = new Set(profileView?.deactivated_mod_ids ?? []);
+      const ids = (
+        await invoke("get_profile", { name })
+      ).filter((id) => !deactivated.has(id));
+      activeOrder = [...ids];
+      currentProfile = name;
+      profileBaseline = [...ids];
+      syncOrderFields();
+      tab = "order";
+      diagnosticsScanToken += 1;
+      diagnosticsSignature = null;
     } catch (err) {
       error = String(err);
     } finally {
@@ -1383,6 +1503,170 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     } finally {
       trashLoading = false;
     }
+  }
+
+  async function refreshProfileCovers() {
+    try {
+      const entries = await invoke("list_profile_covers");
+      profileCovers = Object.fromEntries(
+        entries.map((entry) => [entry.name, entry.data_url])
+      );
+    } catch {
+      profileCovers = {};
+    }
+  }
+
+  async function pickProfileCover(profile) {
+    try {
+      const path = await openDialog({
+        multiple: false,
+        directory: false,
+        filters: [
+          {
+            name: t("Pilt"),
+            extensions: ["png", "jpg", "jpeg", "webp"],
+          },
+        ],
+      });
+      if (!path || Array.isArray(path)) return;
+      busy = true;
+      busyText = t("Lisan profiilipilti…");
+      error = "";
+      message = "";
+      const cover = await invoke("set_profile_cover", {
+        name: profile.name,
+        path,
+      });
+      profileCovers = { ...profileCovers, [profile.name]: cover.data_url };
+      message = t("Profiilipilt lisatud: {name}", { name: profile.name });
+    } catch (err) {
+      error = String(err);
+    } finally {
+      busy = false;
+      busyText = "";
+    }
+  }
+
+  async function clearProfileCover(profile) {
+    if (!window.confirm(t("Eemalda profiili „{name}” pilt?", { name: profile.name }))) {
+      return;
+    }
+    busy = true;
+    busyText = t("Eemaldan profiilipilti…");
+    error = "";
+    message = "";
+    try {
+      await invoke("clear_profile_cover", { name: profile.name });
+      const next = { ...profileCovers };
+      delete next[profile.name];
+      profileCovers = next;
+      message = t("Profiilipilt eemaldatud: {name}", { name: profile.name });
+    } catch (err) {
+      error = String(err);
+    } finally {
+      busy = false;
+      busyText = "";
+    }
+  }
+
+  async function editProfile(profile) {
+    if (busy) return;
+    if (
+      currentProfile &&
+      currentProfile !== profile.name &&
+      profileDirty &&
+      !window.confirm(
+        t("Profiilis „{name}” on salvestamata muudatused. Kas jätkata ja kaotada need?", {
+          name: currentProfile,
+        })
+      )
+    ) {
+      return;
+    }
+    if (currentProfile !== profile.name) {
+      await applyProfileForSimple(profile.name);
+    }
+    editingProfile = profile.name;
+    tab = "mods";
+    stateFilter = "all";
+    categoryFilter = "all";
+    tagFilter = "all";
+    query = "";
+    selectedId = null;
+    details = null;
+  }
+
+  async function cancelEditingProfile() {
+    if (!editingProfile || busy) return;
+    const name = editingProfile;
+    if (
+      profileDirty &&
+      !window.confirm(
+        t("Tühista profiili „{name}” salvestamata muudatused?", { name })
+      )
+    ) {
+      return;
+    }
+    editingProfile = null;
+    if (currentProfile === name && profileDirty) {
+      await applyProfileForSimple(name);
+    }
+    message = t("Muutmine lõpetatud.");
+  }
+
+  async function startCurrentProfile() {
+    if (!currentProfile || busy) return;
+    error = "";
+    message = "";
+    busy = true;
+    busyText = t("Kontrollin olekut…");
+    let status = null;
+    try {
+      status = await invoke("runtime_status");
+      snapshot.summary.steam_running = status.steam_running;
+      snapshot.summary.aml_running = status.aml_running;
+      snapshot.summary.game_running = status.game_running;
+    } catch (err) {
+      error = String(err);
+    } finally {
+      busy = false;
+      busyText = "";
+    }
+    if (!status) return;
+    if (!status.steam_running) {
+      error = t("Steam ei tööta. Käivita Steam ja proovi uuesti.");
+      return;
+    }
+    if (status.aml_running) {
+      error = t("AML on lahti. Sulge AML enne käivitamist.");
+      return;
+    }
+    if (status.game_running) {
+      error = t("XCOM 2 töötab juba.");
+      return;
+    }
+    if (snapshot.summary.missing > 0) {
+      const ok = window.confirm(
+        t("Selles profiilis on {count} puuduvat aktiivset modi. Kas käivitada ikkagi?", {
+          count: snapshot.summary.missing,
+        })
+      );
+      if (!ok) return;
+    }
+    await save();
+    if (error) return;
+    await launch();
+  }
+
+  function openManageProfiles() {
+    setUiMode("advanced");
+    tab = "profiles";
+  }
+
+  async function openChecksFromSimple() {
+    setUiMode("advanced");
+    await tick();
+    await showStat("dependencies");
   }
 
   async function runDiagnostics() {
@@ -1713,6 +1997,14 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     </div>
 
     <div class="top-actions">
+      {#if uiMode === "simple"}
+        <button
+          class="ghost mode-toggle"
+          onclick={() => setUiMode("advanced")}
+          title={t("Ava täisvaade")}
+        >{t("Täisvaade")}</button>
+      {/if}
+      {#if uiMode === "advanced"}
       <div class="profile-picker">
         <select
           value={currentProfile ?? ""}
@@ -1742,6 +2034,7 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
           title={t("Salvesta praegune nimekiri selle profiili sisse")}
         >{t("Salvesta profiil")}</button>
       {/if}
+      {/if}
       <select
         class="lang-select"
         value={lang}
@@ -1752,12 +2045,33 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
         <option value="en">English</option>
         <option value="et">Eesti</option>
       </select>
-      <button class="ghost" onclick={load} disabled={loading || busy}>{t("Laadi uuesti")}</button>
-      <button class="ghost" onclick={refreshWorkshop} disabled={loading || busy}>
-        {t("Värskenda Workshopi")}
-      </button>
-      <button class="primary" onclick={save} disabled={loading || busy || !snapshot}>{t("Salvesta")}</button>
-      <button class="launch" onclick={launch} disabled={loading || busy || !snapshot}>{t("Käivita XCOM 2")}</button>
+      {#if uiMode === "advanced"}
+        <button class="ghost" onclick={load} disabled={loading || busy}>{t("Laadi uuesti")}</button>
+        <button class="ghost" onclick={refreshWorkshop} disabled={loading || busy}>
+          {t("Värskenda Workshopi")}
+        </button>
+        <button
+          class="ghost mode-toggle simple-switch"
+          onclick={() => setUiMode("simple")}
+          disabled={!snapshot}
+          title={t("Ava lihtvaade: ainult profiilid ja Start")}
+        >{t("Lihtvaade")}</button>
+        <button
+          class="primary config-save"
+          class:dirty={gameConfigDirty}
+          onclick={save}
+          disabled={loading || busy || !snapshot}
+          title={t("Kirjuta aktiivne nimekiri XComModOptions.ini faili")}
+        >
+          {t("Salvesta config")}
+          {#if gameConfigDirty}
+            <span class="save-dot"></span>
+          {/if}
+        </button>
+        <button class="launch" onclick={launch} disabled={loading || busy || !snapshot}>{t("Käivita mäng")}</button>
+      {:else}
+        <button class="ghost" onclick={() => (aboutOpen = true)}>{t("Info")}</button>
+      {/if}
     </div>
   </header>
 
@@ -1768,11 +2082,62 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     </div>
   {/if}
 
+  {#if uiMode === "advanced" && snapshot && gameConfigDirty}
+    <div class="config-banner">
+      <div class="config-banner-text">
+        <strong>
+          {#if currentProfile}
+            {t("Profiil „{name}” on rakendatud.", { name: currentProfile })}
+          {:else}
+            {t("Aktiivne nimekiri on muudetud.")}
+          {/if}
+        </strong>
+        <span>
+          {t("Mängu config on veel vana. Salvesta see enne käivitamist.")}
+          {#if diagnosticsFresh()}
+            {" · "}
+            {t("Kontroll: {conflicts} konflikti, {missing} puudulikku sõltuvust.", {
+              conflicts: snapshot.diagnostics.conflicts.length,
+              missing: snapshot.diagnostics.missing_dependency_count,
+            })}
+          {/if}
+        </span>
+      </div>
+      <div class="config-banner-actions">
+        <button class="primary" onclick={save} disabled={busy || loading}>
+          {t("Salvesta mängu config")}
+        </button>
+        <button
+          class="ghost"
+          onclick={() => showStat("dependencies")}
+          disabled={busy || loading}
+        >{t("Vaata kontrolli")}</button>
+      </div>
+    </div>
+  {/if}
+
   {#if error}
     <div class="banner error">{error}</div>
   {/if}
   {#if message}
     <div class="banner info">{message}</div>
+  {/if}
+
+  {#if uiMode === "advanced" && editingProfile && currentProfile === editingProfile}
+    <div class="editing-banner">
+      <div class="editing-text">
+        <strong>{t("Muudad profiili „{name}”.", { name: editingProfile })}</strong>
+        <span>{t("Muudatused lähevad profiili alles „Salvesta profiil” vajutamisel.")}</span>
+      </div>
+      <div class="editing-actions">
+        <button class="primary" onclick={saveCurrentProfile} disabled={busy}>
+          {t("Salvesta profiil")}
+        </button>
+        <button class="ghost" onclick={cancelEditingProfile} disabled={busy}>
+          {t("Tühista muudatused")}
+        </button>
+      </div>
+    </div>
   {/if}
 
   {#if loading}
@@ -1783,6 +2148,23 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
         <p>{t("Modi nimekiri, AML settings + Workshopi metadata")}</p>
       </div>
     </div>
+  {:else if snapshot && uiMode === "simple"}
+    <SimpleMode
+      {snapshot}
+      {currentProfile}
+      {busy}
+      {busyText}
+      {gameConfigDirty}
+      diagnosticsFresh={diagnosticsFresh()}
+      coverUrls={profileCovers}
+      {t}
+      onSelectProfile={(name) => applyProfileForSimple(name)}
+      onStart={startCurrentProfile}
+      onAdvanced={() => setUiMode("advanced")}
+      onManageProfiles={openManageProfiles}
+      onChecks={openChecksFromSimple}
+      onOpenWorkshop={(id) => invoke("open_workshop", { id })}
+    />
   {:else if snapshot}
     <section class="summary">
       <button
@@ -1811,7 +2193,7 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
         class:warn={snapshot.summary.missing > 0}
         class:selected={tab === "mods" && stateFilter === "missing"}
         onclick={() => showStat("missing")}
-        title={t("Näita puuduvaid modisid")}
+        title={t("Näita puuduvaid aktiivseid modisid")}
       >
         <strong>{snapshot.summary.missing}</strong>
         <span>{t("puudub")}</span>
@@ -2183,6 +2565,24 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
               </button>
             </div>
           </div>
+
+          {#if showSimpleHint}
+            <div class="simple-hint">
+              <div class="simple-hint-text">
+                <strong>{t("Modpack on valmis.")}</strong>
+                <span>{t("Lihtvaates näed ainult profiile ja Start-nuppu — profiili vahetamine käib ühe klikiga.")}</span>
+              </div>
+              <div class="simple-hint-actions">
+                <button class="primary" onclick={() => setUiMode("simple")}>
+                  {t("Ava lihtvaade")}
+                </button>
+                <button class="ghost" onclick={dismissSimpleHint}>
+                  {t("Ära näita uuesti")}
+                </button>
+              </div>
+            </div>
+          {/if}
+
           <div class="manager-add">
             <input
               type="text"
@@ -2191,12 +2591,19 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
               onkeydown={(event) => event.key === "Enter" && saveProfile()}
             />
             <button class="primary" onclick={saveProfile} disabled={busy}>
-              {t("Salvesta praegune ({count})", { count: activeOrder.length })}
+              {t("Salvesta praegune profiilina ({count})", { count: activeOrder.length })}
             </button>
           </div>
           <div class="profile-list">
             {#each snapshot.profiles as profile (profile.name)}
-              <div class="profile-card">
+              <div class="profile-card" class:with-cover={profileCovers[profile.name]}>
+                {#if profileCovers[profile.name]}
+                  <img
+                    class="profile-thumb"
+                    src={profileCovers[profile.name]}
+                    alt=""
+                  />
+                {/if}
                 <div class="profile-card-main">
                   <div class="profile-card-title">
                     <strong>{profile.name}</strong>
@@ -2223,8 +2630,16 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
                   {#if profile.description}
                     <p class="profile-desc">{profile.description}</p>
                   {/if}
+                  {#if profile.count === 0}
+                    <p class="profile-empty-hint">
+                      {t("Profiil on tühi. Vajuta „Lisa modisid”.")}
+                    </p>
+                  {/if}
                 </div>
                 <div class="profile-actions">
+                  <button class="mini" onclick={() => editProfile(profile)} disabled={busy}>
+                    {profile.count === 0 ? t("Lisa modisid") : t("Muuda modisid")}
+                  </button>
                   {#if profile.source_id}
                     <button class="mini" onclick={() => openProfileCollection(profile)}>
                       {t("Kollektsioon")}
@@ -2233,6 +2648,14 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
                       class="mini"
                       onclick={() => invoke("open_workshop", { id: profile.source_id })}
                     >{t("Ava Steamis")}</button>
+                  {/if}
+                  <button class="mini" onclick={() => pickProfileCover(profile)}>
+                    {profileCovers[profile.name] ? t("Muuda pilti") : t("Lisa pilt")}
+                  </button>
+                  {#if profileCovers[profile.name]}
+                    <button class="mini danger" onclick={() => clearProfileCover(profile)}>
+                      {t("Eemalda pilt")}
+                    </button>
                   {/if}
                   <button class="mini" onclick={() => exportProfile(profile)}>{t("Ekspordi")}</button>
                   <button class="mini" onclick={() => applyProfile(profile.name)}>{t("Rakenda")}</button>
@@ -2245,7 +2668,7 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
             {/if}
           </div>
           <p class="manager-note">
-            {t("Modi lisamiseks profiili: vali profiil ülaribast, lülita mod Modid-tabis sisse ja vajuta „Salvesta profiil”. Pärast seda vajuta „Salvesta”, et nimekiri mängu configusse läheks.")}
+            {t("Modide muutmiseks vajuta profiilikaardil „Muuda modisid”. Lülita Modid-tabis modid sisse või välja ja vajuta „Salvesta profiil”. Seejärel vajuta „Salvesta”, et nimekiri mängu configusse läheks.")}
           </p>
 
           <div class="cleanup-panel" id="cleanup-panel">
@@ -2710,6 +3133,11 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
       <span title={snapshot.paths.config ?? ""}>Config: {snapshot.paths.config ?? "—"}</span>
       <span title={snapshot.paths.backup_dir}>Backup: {snapshot.paths.backup_dir}</span>
       <span title={snapshot.paths.workshop_dir ?? ""}>Workshop: {snapshot.paths.workshop_dir ?? "—"}</span>
+      <button
+        class="status-info"
+        onclick={() => setUiMode("simple")}
+        title={t("Lülita lihtvaatesse")}
+      >{t("Lihtvaade")}</button>
       <button class="status-info" onclick={() => (aboutOpen = true)}>{t("Info")}</button>
     </footer>
   {/if}
@@ -2876,7 +3304,7 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
         <header class="config-head">
           <div>
             <h2>{t("Uus profiil")}</h2>
-            <p class="muted">{t("Loo tühi profiil või impordi Steam Workshopi kollektsioon.")}</p>
+            <p class="muted">{t("Loo profiil kollektsioonist, praegusest nimekirjast või tühjalt.")}</p>
           </div>
           <div class="config-head-actions">
             <button class="ghost" onclick={closeProfileModal} disabled={busy}>{t("Sulge")}</button>
@@ -2897,14 +3325,31 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
 
           <div class="profile-source">
             <label class="profile-radio">
-              <input type="radio" bind:group={profileMode} value="empty" />
-              {t("Tühi profiil")}
-            </label>
-            <label class="profile-radio">
               <input type="radio" bind:group={profileMode} value="collection" />
               {t("Workshopi kollektsioon")}
+              <span class="source-badge">{t("soovitatud")}</span>
+            </label>
+            <label class="profile-radio">
+              <input type="radio" bind:group={profileMode} value="current" />
+              {t("Praegune aktiivne nimekiri ({count} modi)", { count: activeOrder.length })}
+            </label>
+            <label class="profile-radio">
+              <input type="radio" bind:group={profileMode} value="empty" />
+              {t("Tühi profiil (advanced)")}
             </label>
           </div>
+
+          {#if profileMode === "current"}
+            <p class="profile-source-note">
+              {t("Profiil luuakse praegusest aktiivsest nimekirjast ({count} modi).", {
+                count: activeOrder.length,
+              })}
+            </p>
+          {:else if profileMode === "empty"}
+            <p class="profile-source-note">
+              {t("Tühi profiil on mõeldud edasijõudnutele. Modisid saab hiljem lisada „Muuda modisid” kaudu.")}
+            </p>
+          {/if}
 
           {#if profileMode === "collection"}
             <div class="collection-input">
@@ -3014,7 +3459,7 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
           <button
             class="primary"
             onclick={createProfileFromModal}
-            disabled={busy || collectionLoading || !profileDraftName.trim()}
+            disabled={busy || collectionLoading || !profileDraftName.trim() || (profileMode === "collection" && !collectionPreview)}
           >{t("Loo profiil")}</button>
         </footer>
       </div>
@@ -3435,7 +3880,16 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
           <p>{t("Unofficial mod launcher for XCOM 2: War of the Chosen on Linux. Not affiliated with Firaxis, 2K, Take-Two, Valve, or the AML project.")}</p>
           <p>{t("See projekt on GPL-3.0-only litsentsi all. Täistekst on repos failis LICENSE.")}</p>
           <p class="muted">
-            https://github.com/reiokr/resistance-mod-launcher
+            <a
+              class="about-link"
+              href="https://github.com/reiokr/resistance-mod-launcher"
+              onclick={(event) => {
+                event.preventDefault();
+                invoke("open_url", {
+                  url: "https://github.com/reiokr/resistance-mod-launcher",
+                });
+              }}
+            >https://github.com/reiokr/resistance-mod-launcher</a>
           </p>
         </div>
       </div>
@@ -3509,6 +3963,21 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     gap: 8px;
     flex-shrink: 0;
     flex-wrap: wrap;
+  }
+
+  .mode-toggle {
+    min-width: 70px;
+    font-size: 11px;
+  }
+
+  .simple-switch {
+    border-color: rgba(61, 220, 151, 0.35);
+    color: #9fe8c4;
+  }
+
+  .simple-switch:hover {
+    border-color: #3ddc97;
+    background: rgba(61, 220, 151, 0.08);
   }
 
   .profile-picker {
@@ -3628,6 +4097,92 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
   @keyframes activity {
     0% { transform: translateX(-110%); }
     100% { transform: translateX(290%); }
+  }
+
+  .config-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 20px;
+    flex-wrap: wrap;
+    padding: 10px 22px;
+    border-bottom: 1px solid rgba(240, 180, 41, 0.32);
+    background: linear-gradient(90deg, rgba(240, 180, 41, 0.13), rgba(240, 180, 41, 0.04));
+    box-shadow: inset 4px 0 0 #f0b429;
+  }
+
+  .config-banner-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    color: #c9b37c;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .config-banner-text strong {
+    color: #ffe1a1;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .config-banner-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .config-save {
+    position: relative;
+  }
+
+  .config-save.dirty {
+    border-color: #f0b429;
+    box-shadow: 0 0 0 1px rgba(240, 180, 41, 0.35);
+  }
+
+  .save-dot {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #f0b429;
+    box-shadow: 0 0 0 2px #0d1117;
+  }
+
+  .editing-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 20px;
+    flex-wrap: wrap;
+    padding: 10px 22px;
+    border-bottom: 1px solid rgba(43, 179, 255, 0.3);
+    background: rgba(43, 179, 255, 0.07);
+    box-shadow: inset 4px 0 0 #2bb3ff;
+  }
+
+  .editing-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    color: #9fd7ff;
+    font-size: 12px;
+  }
+
+  .editing-text strong {
+    color: #cfeaff;
+    font-size: 13px;
+  }
+
+  .editing-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
   }
 
   .banner {
@@ -4081,6 +4636,39 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     font-size: 12.5px;
   }
 
+  .simple-hint {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 20px;
+    flex-wrap: wrap;
+    margin: 14px 0 0;
+    padding: 12px 14px;
+    border: 1px solid rgba(61, 220, 151, 0.28);
+    border-radius: 11px;
+    background: linear-gradient(135deg, rgba(61, 220, 151, 0.08), rgba(43, 179, 255, 0.05));
+    box-shadow: inset 4px 0 0 #3ddc97;
+  }
+
+  .simple-hint-text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    color: #9fb3c8;
+    font-size: 12px;
+  }
+
+  .simple-hint-text strong {
+    color: #d9f7e9;
+    font-size: 13px;
+  }
+
+  .simple-hint-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
   .manager {
     flex: 1;
     min-width: 0;
@@ -4190,6 +4778,25 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     background: rgba(15, 21, 30, 0.6);
   }
 
+  .profile-card.with-cover {
+    flex-wrap: wrap;
+  }
+
+  .profile-card.with-cover .profile-actions {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+  }
+
+  .profile-thumb {
+    width: 72px;
+    height: 72px;
+    flex-shrink: 0;
+    border: 1px solid #263244;
+    border-radius: 9px;
+    object-fit: cover;
+    background: #0f151e;
+  }
+
   .profile-card-main {
     flex: 1;
     min-width: 0;
@@ -4208,6 +4815,29 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     gap: 12px;
     margin-top: 4px;
     color: #8d9bb0;
+    font-size: 11.5px;
+  }
+
+  .source-badge {
+    margin-left: 6px;
+    padding: 1px 6px;
+    border: 1px solid rgba(61, 220, 151, 0.35);
+    border-radius: 999px;
+    color: #3ddc97;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .profile-source-note {
+    margin: 8px 0 0;
+    color: #8d9bb0;
+    font-size: 11.5px;
+  }
+
+  .profile-empty-hint {
+    margin: 7px 0 0;
+    color: #f3d28a;
     font-size: 11.5px;
   }
 
@@ -5262,6 +5892,16 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     color: #b9c7d8;
     font-size: 12.5px;
     line-height: 1.6;
+  }
+
+  .about-link {
+    color: #2bb3ff;
+    text-decoration: none;
+    word-break: break-all;
+  }
+
+  .about-link:hover {
+    text-decoration: underline;
   }
 
   .about-body p {
