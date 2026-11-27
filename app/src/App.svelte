@@ -24,6 +24,17 @@
     return locale.startsWith("et") ? "et" : "en";
   }
   let lang = $state(initialLanguage());
+  let diagnosticsSignature = $state(null);
+  let diagnosticsScanToken = 0;
+  function activeSignature(ids) {
+    return ids.join("\u0000");
+  }
+  function diagnosticsFresh() {
+    return (
+      !!snapshot?.diagnostics &&
+      diagnosticsSignature === activeSignature(activeOrder)
+    );
+  }
   const t = (text, vars) => translate(lang, text, vars);
   function setLanguage(value) {
     if (value !== "et" && value !== "en") return;
@@ -108,7 +119,7 @@
   let readmeLoading = $state(false);
   let readmeError = $state("");
   let aboutOpen = $state(false);
-  let appVersion = $state("0.2.6");
+  let appVersion = $state("0.2.7");
 
   onMount(() => {
     document.documentElement.lang = lang;
@@ -117,6 +128,8 @@
   });
 
   async function load() {
+    diagnosticsScanToken += 1;
+    diagnosticsSignature = null;
     const firstLoad = !snapshot;
     if (firstLoad) {
       loading = true;
@@ -271,6 +284,7 @@
 
   function syncOrderFields() {
     if (!snapshot) return;
+    diagnosticsSignature = null;
     for (const mod of snapshot.mods) {
       const index = activeOrder.indexOf(mod.id);
       mod.active = index >= 0;
@@ -1188,23 +1202,34 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
       syncOrderFields();
       tab = "order";
       let scanNote = "";
+      const scanIds = [...activeOrder];
+      const signature = activeSignature(scanIds);
+      const token = ++diagnosticsScanToken;
       try {
         busyText = t("Kontrollin profiili konflikte…");
         const report = await invoke("scan_diagnostics", {
-          active_ids: activeOrder,
+          active_ids: scanIds,
         });
-        snapshot.diagnostics = report;
-        snapshot.summary.conflicts = report.conflicts.length;
-        snapshot.summary.missing_dependencies = report.missing_dependency_links;
-        scanNote = " " + t(
-          "Kontroll: {conflicts} konflikti, {missing} puudulikku sõltuvust.",
-          {
-            conflicts: report.conflicts.length,
-            missing: report.missing_dependency_count,
-          }
-        );
+        if (
+          token === diagnosticsScanToken &&
+          signature === activeSignature(activeOrder)
+        ) {
+          snapshot.diagnostics = report;
+          diagnosticsSignature = signature;
+          snapshot.summary.conflicts = report.conflicts.length;
+          snapshot.summary.missing_dependencies = report.missing_dependency_links;
+          scanNote = " " + t(
+            "Kontroll: {conflicts} konflikti, {missing} puudulikku sõltuvust.",
+            {
+              conflicts: report.conflicts.length,
+              missing: report.missing_dependency_count,
+            }
+          );
+        }
       } catch {
-        scanNote = " " + t("Konfliktikontroll ebaõnnestus.");
+        if (token === diagnosticsScanToken) {
+          scanNote = " " + t("Konfliktikontroll ebaõnnestus.");
+        }
       }
       message =
         t("Profiil \"{name}\" rakendatud. Vajuta Salvesta, et see mängu configusse kirjutada.", { name }) +
@@ -1361,22 +1386,37 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
   }
 
   async function runDiagnostics() {
+    if (busy) return;
+    const scanIds = [...activeOrder];
+    const signature = activeSignature(scanIds);
+    const token = ++diagnosticsScanToken;
     busy = true;
-    busyText = t("Kontrollin konflikte ja sõltuvusi ({count} aktiivset modi)…", { count: activeOrder.length });
+    busyText = t("Kontrollin konflikte ja sõltuvusi ({count} aktiivset modi)…", { count: scanIds.length });
     error = "";
     message = "";
     try {
-      const report = await invoke("scan_diagnostics", { active_ids: activeOrder });
+      const report = await invoke("scan_diagnostics", { active_ids: scanIds });
+      if (
+        token !== diagnosticsScanToken ||
+        signature !== activeSignature(activeOrder)
+      ) {
+        return;
+      }
       snapshot.diagnostics = report;
+      diagnosticsSignature = signature;
       snapshot.summary.conflicts = report.conflicts.length;
       snapshot.summary.missing_dependencies = report.missing_dependency_links;
       tab = "diagnostics";
       message = t("Kontroll valmis: {missing} modi puudulike sõltuvustega, {conflicts} konflikti, {duplicates} duplikaatrühma.", { missing: report.missing_dependency_count, conflicts: report.conflicts.length, duplicates: report.duplicate_groups.length });
     } catch (err) {
-      error = String(err);
+      if (token === diagnosticsScanToken) {
+        error = String(err);
+      }
     } finally {
-      busy = false;
-      busyText = "";
+      if (token === diagnosticsScanToken) {
+        busy = false;
+        busyText = "";
+      }
     }
   }
 
@@ -1463,7 +1503,11 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
         message = t("Tundmatuid aktiivseid modisid ei ole.");
       }
     } else if (view === "conflicts" || view === "dependencies") {
-      if (!snapshot.diagnostics) await runDiagnostics();
+      if (busy) {
+        message = t("Kontroll käib juba, oota…");
+        return;
+      }
+      if (!diagnosticsFresh()) await runDiagnostics();
       tab = "diagnostics";
       await tick();
       document
@@ -2331,12 +2375,18 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
         <div class="manager diagnostics">
           <div class="manager-title">
             <h2>{t("Kontroll")}</h2>
+            {#if currentProfile}
+              <span class="badge">{currentProfile}</span>
+            {/if}
             <span class="muted">
               {#if snapshot.diagnostics}
                 {t("viimane kontroll {date} · {count} aktiivset modi", {
                   date: formatUnix(snapshot.diagnostics.scanned_at),
                   count: snapshot.diagnostics.active_mods,
                 })}
+                {#if !diagnosticsFresh()}
+                  <span class="badge warn">{t("aegunud")}</span>
+                {/if}
               {:else}
                 {t("veel pole tehtud")}
               {/if}

@@ -4964,7 +4964,7 @@ dependencies = [
 
 [[package]]
 name = "xcom2-launcher-core"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "anyhow",
  "clap",
@@ -4975,7 +4975,7 @@ dependencies = [
 
 [[package]]
 name = "xcom2-mod-launcher"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "anyhow",
  "encoding_rs",

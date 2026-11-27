@@ -3,6 +3,10 @@
 
 export const en = {
 
+  "Kontroll käib juba, oota…": "A check is already running, please wait…",
+
+  "aegunud": "stale",
+
   "Keel": "Language",
 
   "Algne kaust on juba olemas. Eemalda see enne taastamist.":
