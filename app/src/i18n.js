@@ -3,6 +3,164 @@
 
 export const en = {
 
+  "Algne kaust on juba olemas. Eemalda see enne taastamist.":
+    "The original folder already exists. Remove it before restoring.",
+
+  "Ekspordi kõik": "Export all",
+  "Ekspordin kõiki profiile…": "Exporting all profiles…",
+  "Eksporditud {count} profiili: {path}": "Exported {count} profiles: {path}",
+  "Laadi prügikast": "Load trash",
+  "Mod „{name}” taastati: {path}": "Mod \"{name}\" restored to {path}",
+  "Prügikast": "Trash",
+  "Prügikast on tühi.": "The trash is empty.",
+  "Siin on ainult selle rakenduse poolt Workshopist prügikasti viidud modid. Taastamine viib kausta tagasi algsesse asukohta.":
+    "Only mods moved to the trash from the Workshop by this launcher are shown here. Restore moves the folder back to its original location.",
+  "Taastada mod „{name}” algupärasesse kausta?":
+    "Restore mod \"{name}\" to its original folder?",
+  "Vajuta „Laadi prügikast”, et näha eemaldatud modisid.":
+    "Press “Load trash” to see removed mods.",
+  "Vali kaust profiilide eksportimiseks":
+    "Choose a folder for profile export",
+
+  "kasutusel mujal": "used elsewhere",
+  "teised profiilid või aktiivne nimekiri": "other profiles or the active list",
+
+  "Eemalda kettalt": "Remove from disk",
+  "Eemalda mod „{name}” kettalt? See viiakse prügikasti. Kui Steamis on tellimus alles, võib Steam selle uuesti alla laadida.":
+    "Remove mod \"{name}\" from disk? It will be moved to the trash. If the Steam subscription is still active, Steam may download it again.",
+  "Mod „{name}” viidi prügikasti ({size}).":
+    "Mod \"{name}\" was moved to the trash ({size}).",
+  "Tellimuse tühistamine toimub Steamis. „Eemalda kettalt” viib kausta prügikasti; kui tellimus on alles, võib Steam selle uuesti alla laadida.":
+    "Unsubscribing happens in Steam. \"Remove from disk\" moves the folder to the trash; if the subscription is still active, Steam may download it again.",
+
+  "Arvutan profiili mõju…": "Calculating profile impact…",
+  "Kasutamata modid": "Unused mods",
+  "Kasutamata modid on paigaldatud Workshopi modid, mida ükski profiil ega aktiivne nimekiri ei kasuta. See vaade ei kustuta faile ega muuda Steami tellimusi.":
+    "Unused mods are installed Workshop mods not referenced by any profile or the active list. This view does not delete files or change Steam subscriptions.",
+  "Kasutamata modisid ei leitud.": "No unused mods were found.",
+  "Kustuta profiil": "Delete profile",
+  "Kustutan…": "Deleting…",
+  "Profiili kustutamine eemaldab ainult profiili. Modisid ei kustutata ega unsubscribe'ita.":
+    "Deleting a profile removes only the profile. Mods are not deleted or unsubscribed.",
+  "Pärast kustutamist ei kasuta {count} modi ükski profiil. Need jäävad kettale ja Steami tellimusse; kasutamata modide vaates saad need üle vaadata.":
+    "After deletion, {count} mods will no longer be used by any profile. They stay on disk and in Steam subscriptions; you can review them in the unused mods view.",
+  "Skaneeri": "Scan",
+  "Skaneerin kasutamata modisid…": "Scanning for unused mods…",
+  "Skaneerin…": "Scanning…",
+  "Tellimuse tühistamine toimub Steamis. Kohaliku kausta eemaldamine tuleb järgmises etapis.":
+    "Unsubscribing happens in Steam. Removing the local folder comes in the next step.",
+  "Vajuta „Skaneeri”, et leida modid, mida ükski profiil ei kasuta.":
+    "Press “Scan” to find mods not used by any profile.",
+  "ainult selle profiili kasutuses": "used only by this profile",
+  "jagatud teiste profiilidega": "shared with other profiles",
+  "kasutamata": "unused",
+  "kasutusel": "in use",
+  "modi profiilis": "mods in profile",
+  "paigaldatud modi": "installed mods",
+  "profiilides või aktiivses nimekirjas": "in profiles or the active list",
+  "{count} kandidaati": "{count} candidates",
+
+  "Ekspordi": "Export",
+  "Ekspordin profiili…": "Exporting profile…",
+  "Impordi": "Import",
+  "Impordi profiil": "Import profile",
+  "Impordin…": "Importing…",
+  "Kollektsioon: {title}": "Collection: {title}",
+  "Kõik profiili modid on selles masinas olemas.":
+    "All mods in the profile are available on this machine.",
+  "Loen profiilifaili…": "Loading profile file…",
+  "Profiil asendatud: {name} ({count} modi)":
+    "Profile replaced: {name} ({count} mods)",
+  "Profiil eksporditud: {path}": "Profile exported: {path}",
+  "Profiil imporditud: {name} ({count} modi)":
+    "Profile imported: {name} ({count} mods)",
+  "Profiili nimi": "Profile name",
+  "Puuduvad modid jäävad profiili ootele. Pärast nende tellimist ja allalaadimist vajuta „Laadi uuesti”.":
+    "Missing mods stay pending in the profile. After subscribing and downloading them, press Reload.",
+  "Resistance Mod Launcheri profiil": "Resistance Mod Launcher profile",
+  "Selle nimega profiil on juba olemas — asenda see.":
+    "A profile with this name already exists — replace it.",
+  "Selle nimega profiil on juba olemas. Vali teine nimi või märgi „Asenda olemasolev”.":
+    "A profile with this name already exists. Choose another name or tick “Replace existing”.",
+  "Selles masinas puuduvad modid": "Mods missing on this machine",
+  "modi": "mods",
+  "olemas": "available",
+  "{count} modi puudub selles masinas — vaata profiili „Ootab” märki.":
+    "{count} mods are missing on this machine — see the profile's Pending badge.",
+
+  "Kõik paigaldatud kollektsiooni modid on profiilis.":
+    "All installed collection mods are in the profile.",
+
+  "{count} deaktiveeritud": "{count} deactivated",
+  "Taasta": "Restore",
+  "Taastan modi…": "Restoring mod…",
+  "Mod „{name}” taastati profiilis. Rakenda profiil, et see aktiivseks teha.":
+    "Mod \"{name}\" was restored in the profile. Apply the profile to activate it.",
+  "„Taasta” lisab modi profiili tagasi. Rakenda profiil, et see aktiivseks läheks.":
+    "\"Restore\" adds the mod back to the profile. Apply the profile to activate it.",
+
+  "profiil pole praegu aktiivne": "profile is not currently active",
+
+  "Deaktiveeritud": "Deactivated",
+  "deaktiveeritud": "deactivated",
+  "Kõik paigaldatud kollektsiooni modid on profiilis ja aktiivsed.":
+    "All installed collection mods are in the profile and active.",
+  "Deaktiveeritud modide „Lülita sisse” muudab ainult aktiivset nimekirja. Vajuta pärast sulgemist Salvesta, et see mängu configusse läheks.":
+    "\"Enable\" on a deactivated mod only changes the active list. After closing, press Save to write it to the game config.",
+
+  "Võrdle profiili praeguse aktiivse nimekirjaga":
+    "Compare the profile with the current active list",
+
+  "Erinevused": "Differences",
+  "Profiili erinevused": "Profile differences",
+  "Laen profiili…": "Loading profile…",
+  "Profiilis {profile} modi": "{profile} mods in the profile",
+  "Praegu aktiivsed {active} modi": "{active} mods currently active",
+  "Profiilis, aga mitte aktiivsetes": "In the profile, but not active",
+  "Kõik profiili modid on aktiivsed.": "All mods in the profile are active.",
+  "Aktiivsed, aga profiilis pole": "Active, but not in the profile",
+  "See vaade võrdleb profiili salvestatud nimekirja praeguse aktiivse nimekirjaga. Muudatused jõustuvad mängus alles pärast „Salvesta” vajutamist.":
+    "This view compares the profile's saved list with the current active list. Changes take effect in the game only after pressing Save.",
+  "Uuenda profiil praegusega ({count})": "Update profile with current ({count})",
+  "Kirjutada profiil „{name}” praeguse nimekirjaga? Profiilist eemaldatakse {count} modi.":
+    "Overwrite profile \"{name}\" with the current list? {count} mods will be removed from the profile.",
+  "Profiil „{name}” uuendatud: {count} modi.":
+    "Profile \"{name}\" updated: {count} mods.",
+  "Mod „{name}” lülitati sisse. Vajuta Salvesta, et muudatus mängu configusse läheks.":
+    "Mod \"{name}\" was enabled. Press Save to write the change to the game config.",
+  "Mod „{name}” lülitati välja. Vajuta Salvesta, et muudatus mängu configusse läheks.":
+    "Mod \"{name}\" was disabled. Press Save to write the change to the game config.",
+
+  "Tundmatud aktiivsed modid": "Unknown active mods",
+  "Kõik aktiivsed modid on kataloogis olemas.": "All active mods exist in the catalog.",
+  "Seda ID-d ei leitud kataloogist ega Workshopi kaustast.":
+    "This ID was not found in the catalog or a Workshop folder.",
+  "Need ID-d on XComModOptions.ini-s aktiivsed, aga launcher ei leia neile modi. Kontrolli modi kausta või eemalda ID configust.":
+    "These IDs are active in XComModOptions.ini, but the launcher cannot find a mod for them. Check the mod folder or remove the ID from the config.",
+
+  "Näita aktiivseid": "Show active",
+  "Näita kõiki": "Show all",
+  "Näita puuduvaid modisid": "Show missing mods",
+  "Tundmatud aktiivsed modid": "Unknown active mods",
+  "Näita uuendusi": "Show updates",
+  "Ava konfliktid": "Open conflicts",
+  "Ava puuduvad sõltuvused": "Open missing dependencies",
+  "Ava kategooriad": "Open categories",
+  "Tundmatuid aktiivseid modisid: {count}. Kontrolli XComModOptions.ini sisu.":
+    "Unknown active mods: {count}. Check XComModOptions.ini.",
+  "Tundmatuid aktiivseid modisid ei ole.": "There are no unknown active mods.",
+  "Uuendused": "Updates",
+
+  "Lülita sisse": "Enable",
+  "Sõltuvus \"{name}\" lülitati sisse. Vajuta Salvesta, et muudatus mängu configusse läheks.":
+    "Dependency \"{name}\" was enabled. Press Save to write the change to the game config.",
+
+  "Lülita välja": "Disable",
+  "Lülitada mod \"{name}\" välja ja kontrollida konfliktid uuesti?":
+    "Disable mod \"{name}\" and check conflicts again?",
+  "Mod \"{name}\" lülitati välja. Vajuta Salvesta, et muudatus mängu configusse läheks.":
+    "Mod \"{name}\" was disabled. Press Save to write the change to the game config.",
+
   "Salvesta profiil": "Save profile",
   "Salvesta praegune nimekiri selle profiili sisse":
     "Save the current list into this profile",

@@ -17,11 +17,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use walkdir::WalkDir;
-use xcom2_launcher_core::{AmlMod, AmlRoot, SteamPaths, discover_paths, parse_active_mods};
+use xcom2_launcher_core::{
+    AmlMod, SteamPaths, discover_paths, parse_active_mods, scan_workshop_mods,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MissingDependency {
     pub workshop_id: u64,
+    pub mod_id: Option<String>,
     pub title: Option<String>,
     pub tags: Vec<String>,
     pub installed: bool,
@@ -67,6 +70,8 @@ pub struct DuplicateIssue {
 pub struct DiagnosticsReport {
     pub scanned_at: i64,
     pub active_mods: usize,
+    #[serde(default)]
+    pub unknown_active_ids: Vec<String>,
     pub missing_dependency_count: usize,
     pub missing_dependency_links: usize,
     pub missing_dependencies: Vec<DependencyIssue>,
@@ -271,16 +276,22 @@ pub fn scan() -> Result<DiagnosticsReport> {
     scan_with(None)
 }
 
+fn collect_unknown_active(active: &HashSet<String>, known: &HashSet<&str>) -> Vec<String> {
+    let mut unknown: Vec<String> = active
+        .iter()
+        .filter(|id| !known.contains(id.as_str()))
+        .cloned()
+        .collect();
+    unknown.sort_by_key(|id| id.to_lowercase());
+    unknown
+}
+
 /// Scan with an explicit active list (the UI's unsaved state) or the saved
 /// `XComModOptions.ini` when `active_ids` is `None`.
 pub fn scan_with(active_ids_override: Option<Vec<String>>) -> Result<DiagnosticsReport> {
     let paths = discover_paths()?;
-    let settings_path = paths
-        .settings
-        .clone()
-        .context("AML settings.json was not found")?;
-    let settings = AmlRoot::load(&settings_path)?;
-    let all = settings.all_mods_with_workshop(paths.workshop_dir.as_deref())?;
+    let settings = crate::catalog::load_with_paths(&paths)?;
+    let all = settings.all_mods();
 
     let config_dir = paths
         .wotc_config
@@ -300,10 +311,42 @@ pub fn scan_with(active_ids_override: Option<Vec<String>>) -> Result<Diagnostics
     };
     let active_set: HashSet<String> = active_ids.into_iter().collect();
 
+    let known_ids: HashSet<&str> = all.iter().map(|entry| entry.id.as_str()).collect();
+    let unknown_active_ids = collect_unknown_active(&active_set, &known_ids);
+
     let all_by_workshop: HashMap<u64, &AmlMod> = all
         .iter()
         .filter_map(|entry| entry.workshop_id.filter(|id| *id > 0).map(|id| (id, entry)))
         .collect();
+    let all_by_internal: HashMap<String, &AmlMod> = all
+        .iter()
+        .map(|entry| (entry.id.to_lowercase(), entry))
+        .collect();
+    let mut folder_internal: HashMap<u64, String> = HashMap::new();
+    if let Some(workshop_dir) = paths.workshop_dir.as_deref() {
+        if let Ok(index) = scan_workshop_mods(workshop_dir) {
+            for file in index.by_path.values() {
+                let dir = if file.path.is_dir() {
+                    file.path.as_path()
+                } else {
+                    match file.path.parent() {
+                        Some(parent) => parent,
+                        None => continue,
+                    }
+                };
+                let Some(folder_id) = dir
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .and_then(|name| name.parse::<u64>().ok())
+                else {
+                    continue;
+                };
+                if !file.internal_id.is_empty() {
+                    folder_internal.insert(folder_id, file.internal_id.clone());
+                }
+            }
+        }
+    }
     let active_entries: Vec<&AmlMod> = all
         .iter()
         .filter(|entry| active_set.contains(&entry.id))
@@ -319,16 +362,30 @@ pub fn scan_with(active_ids_override: Option<Vec<String>>) -> Result<Diagnostics
                 continue;
             }
             let workshop_id = *dependency as u64;
-            let installed = all_by_workshop.get(&workshop_id).copied();
+            let entry = all_by_workshop.get(&workshop_id).copied().or_else(|| {
+                folder_internal
+                    .get(&workshop_id)
+                    .and_then(|internal| all_by_internal.get(&internal.to_lowercase()))
+                    .copied()
+            });
+            let installed = entry
+                .and_then(|mod_entry| crate::mod_paths::entry_path(mod_entry, &paths))
+                .is_some();
             let active = installed
-                .map(|mod_entry| active_set.contains(&mod_entry.id))
-                .unwrap_or(false);
+                && entry
+                    .map(|mod_entry| active_set.contains(&mod_entry.id))
+                    .unwrap_or(false);
             if !active {
                 missing.push(MissingDependency {
                     workshop_id,
-                    title: installed.and_then(|mod_entry| mod_entry.name.clone()),
+                    mod_id: if installed {
+                        entry.map(|mod_entry| mod_entry.id.clone())
+                    } else {
+                        None
+                    },
+                    title: entry.and_then(|mod_entry| mod_entry.name.clone()),
                     tags: Vec::new(),
-                    installed: installed.is_some(),
+                    installed,
                     active,
                 });
             }
@@ -352,7 +409,6 @@ pub fn scan_with(active_ids_override: Option<Vec<String>>) -> Result<Diagnostics
             issue
                 .missing
                 .iter()
-                .filter(|dependency| dependency.title.is_none())
                 .map(|dependency| dependency.workshop_id)
         })
         .collect();
@@ -366,8 +422,8 @@ pub fn scan_with(active_ids_override: Option<Vec<String>>) -> Result<Diagnostics
                 .items
                 .get(&dependency.workshop_id.to_string())
             {
-                if dependency.title.is_none() {
-                    dependency.title = details.title.clone();
+                if let Some(title) = details.title.clone() {
+                    dependency.title = Some(title);
                 }
                 dependency.tags = details.tags.clone();
             }
@@ -410,6 +466,7 @@ pub fn scan_with(active_ids_override: Option<Vec<String>>) -> Result<Diagnostics
     let report = DiagnosticsReport {
         scanned_at,
         active_mods: active_entries.len(),
+        unknown_active_ids,
         missing_dependency_count: missing_dependencies.len(),
         missing_dependency_links,
         missing_dependencies,
@@ -426,6 +483,19 @@ pub fn scan_with(active_ids_override: Option<Vec<String>>) -> Result<Diagnostics
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn collects_unknown_active_ids_sorted() {
+        let active: HashSet<String> = ["Known", "Zeta", "Alpha"]
+            .iter()
+            .map(|id| id.to_string())
+            .collect();
+        let known: HashSet<&str> = ["Known"].into_iter().collect();
+        assert_eq!(
+            collect_unknown_active(&active, &known),
+            vec!["Alpha".to_string(), "Zeta".to_string()]
+        );
+    }
 
     fn over(mod_id: &str, base: &str, new: &str, kind: &str, line: &str) -> RawOverride {
         RawOverride {

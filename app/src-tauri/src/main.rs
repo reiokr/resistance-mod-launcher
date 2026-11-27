@@ -13,16 +13,18 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use xcom2_launcher_core::{
-    APP_ID, AmlMod, AmlRoot, SteamPaths, build_active_mods, default_mod_options_timestamp,
-    discover_paths, map_windows_path, parse_active_mods, parse_ini_version, render_mod_options,
-    write_mod_options,
+    APP_ID, AmlMod, SteamPaths, build_active_mods, default_mod_options_timestamp, discover_paths,
+    map_windows_path, parse_active_mods, parse_ini_version, render_mod_options, write_mod_options,
 };
 
 mod auto_category;
+mod catalog;
 mod category_learning;
+mod cleanup;
 mod config_editor;
 mod diagnostics;
 mod mod_paths;
+mod profile_io;
 mod readme;
 mod state;
 mod workshop;
@@ -178,11 +180,8 @@ fn mod_path(entry: &AmlMod, paths: &SteamPaths) -> (Option<PathBuf>, bool) {
 
 fn load_snapshot() -> Result<AppSnapshot> {
     let paths = discover_paths()?;
-    let settings_path = paths
-        .settings
-        .clone()
-        .context("AML settings.json was not found (is AML installed in <game>/Launcher?)")?;
-    let settings = AmlRoot::load(&settings_path)?;
+    let settings = catalog::load_with_paths(&paths)?;
+    let settings_path = paths.settings.clone().or_else(|| catalog::path().ok());
 
     let mut app_state = state::load()?;
     if state::ensure_from_aml(&mut app_state, &settings) {
@@ -214,7 +213,7 @@ fn load_snapshot() -> Result<AppSnapshot> {
         .map(|(index, id)| (id, index))
         .collect();
 
-    let mut all = settings.all_mods_with_workshop(paths.workshop_dir.as_deref())?;
+    let mut all = settings.all_mods();
     let cache = workshop::load_cache().unwrap_or_default();
     for entry in &mut all {
         if entry.name.as_deref().map_or(true, |name| name == entry.id) {
@@ -342,7 +341,9 @@ fn load_snapshot() -> Result<AppSnapshot> {
                 .workshop_dir
                 .as_ref()
                 .map(|path| path.display().to_string()),
-            settings: Some(settings_path.display().to_string()),
+            settings: settings_path
+                .as_ref()
+                .map(|path| path.display().to_string()),
             config: Some(config_path.display().to_string()),
             backup_dir: backup_dir.display().to_string(),
         },
@@ -364,11 +365,7 @@ fn save_state_impl(active_ids: Vec<String>) -> Result<SaveResult> {
         .collect();
 
     let paths = discover_paths()?;
-    let settings_path = paths
-        .settings
-        .clone()
-        .context("AML settings.json was not found")?;
-    let settings = AmlRoot::load(&settings_path)?;
+    let settings = catalog::load_with_paths(&paths)?;
     let active = build_active_mods(&settings, &paths, &active_ids)?;
 
     let game_dir = paths
@@ -432,11 +429,7 @@ fn launch_game_impl() -> Result<LaunchResult> {
         bail!("Steam is not running. Start Steam and sign in.");
     }
     let paths = discover_paths()?;
-    let settings_path = paths
-        .settings
-        .clone()
-        .context("AML settings.json was not found")?;
-    let settings = AmlRoot::load(&settings_path)?;
+    let settings = catalog::load_with_paths(&paths)?;
     let game_dir = paths
         .game_dir
         .as_deref()
@@ -607,13 +600,9 @@ async fn scan_diagnostics(
 
 fn get_mod_details_impl(id: &str) -> Result<ModDetails> {
     let paths = discover_paths()?;
-    let settings_path = paths
-        .settings
-        .clone()
-        .context("AML settings.json was not found")?;
-    let settings = AmlRoot::load(&settings_path)?;
+    let settings = catalog::load_with_paths(&paths)?;
     let entry = settings
-        .all_mods_with_workshop(paths.workshop_dir.as_deref())?
+        .all_mods()
         .into_iter()
         .find(|entry| entry.id == id)
         .with_context(|| format!("Mod not found: {id}"))?;
@@ -712,10 +701,104 @@ fn delete_profile(name: String) -> Result<(), String> {
     state::save(&app_state).map_err(|err| format!("{err:#}"))
 }
 
+#[tauri::command(rename_all = "snake_case")]
+async fn preview_profile_delete(name: String) -> Result<cleanup::DeletePreview, String> {
+    tauri::async_runtime::spawn_blocking(move || cleanup::preview_profile_delete(&name))
+        .await
+        .map_err(|err| format!("Delete preview task failed: {err}"))?
+        .map_err(|err| format!("{err:#}"))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+async fn scan_unused_mods(
+    active_ids: Option<Vec<String>>,
+) -> Result<cleanup::CleanupReport, String> {
+    tauri::async_runtime::spawn_blocking(move || cleanup::scan_unused_mods(active_ids))
+        .await
+        .map_err(|err| format!("Cleanup task failed: {err}"))?
+        .map_err(|err| format!("{err:#}"))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+async fn remove_unused_mod(
+    workshop_id: u64,
+    active_ids: Option<Vec<String>>,
+) -> Result<cleanup::QuarantineResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        cleanup::quarantine_unused_mod(workshop_id, active_ids)
+    })
+    .await
+    .map_err(|err| format!("Cleanup task failed: {err}"))?
+    .map_err(|err| format!("{err:#}"))
+}
+
+#[tauri::command]
+async fn list_mod_trash() -> Result<Vec<cleanup::TrashEntry>, String> {
+    tauri::async_runtime::spawn_blocking(cleanup::list_mod_trash)
+        .await
+        .map_err(|err| format!("Trash task failed: {err}"))?
+        .map_err(|err| format!("{err:#}"))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+async fn restore_mod_trash(id: String) -> Result<cleanup::TrashEntry, String> {
+    tauri::async_runtime::spawn_blocking(move || cleanup::restore_mod_trash(&id))
+        .await
+        .map_err(|err| format!("Trash task failed: {err}"))?
+        .map_err(|err| format!("{err:#}"))
+}
+
 #[tauri::command]
 fn get_profile(name: String) -> Result<Vec<String>, String> {
     let app_state = state::load().map_err(|err| format!("{err:#}"))?;
     state::get_profile(&app_state, &name).map_err(|err| format!("{err:#}"))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn set_profile_mod_deactivated(
+    name: String,
+    mod_id: String,
+    deactivated: bool,
+) -> Result<Vec<String>, String> {
+    let mut app_state = state::load().map_err(|err| format!("{err:#}"))?;
+    let result = state::set_profile_mod_deactivated(&mut app_state, &name, &mod_id, deactivated)
+        .map_err(|err| format!("{err:#}"))?;
+    state::save(&app_state).map_err(|err| format!("{err:#}"))?;
+    Ok(result)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn restore_profile_mod(name: String, mod_id: String) -> Result<Vec<String>, String> {
+    let mut app_state = state::load().map_err(|err| format!("{err:#}"))?;
+    let result = state::restore_profile_mod(&mut app_state, &name, &mod_id)
+        .map_err(|err| format!("{err:#}"))?;
+    state::save(&app_state).map_err(|err| format!("{err:#}"))?;
+    Ok(result)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn export_profile(name: String, path: String) -> Result<(), String> {
+    profile_io::export_profile(&name, &path).map_err(|err| format!("{err:#}"))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn export_all_profiles(directory: String) -> Result<profile_io::ExportAllResult, String> {
+    profile_io::export_all_profiles(&directory).map_err(|err| format!("{err:#}"))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn preview_profile_import(path: String) -> Result<profile_io::ImportPreview, String> {
+    profile_io::preview_profile_import(&path).map_err(|err| format!("{err:#}"))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn apply_profile_import(
+    path: String,
+    name_override: Option<String>,
+    replace_existing: bool,
+) -> Result<profile_io::ImportResult, String> {
+    profile_io::apply_profile_import(&path, name_override, replace_existing)
+        .map_err(|err| format!("{err:#}"))
 }
 
 fn now_unix() -> i64 {
@@ -746,6 +829,7 @@ fn create_empty_profile(name: String, description: Option<String>) -> Result<Str
         collection_children: Vec::new(),
         pending_workshop_ids: Vec::new(),
         excluded_workshop_ids: Vec::new(),
+        deactivated_mod_ids: Vec::new(),
         updated: now_unix(),
     };
     state::create_profile(&mut app_state, profile).map_err(|err| format!("{err:#}"))?;
@@ -847,6 +931,7 @@ fn create_profile_from_collection_impl(
             collection_children,
             pending_workshop_ids,
             excluded_workshop_ids,
+            deactivated_mod_ids: Vec::new(),
             updated: now_unix(),
         },
     )?;
@@ -1164,6 +1249,155 @@ fn main() {
         return;
     }
 
+    if let Some(index) = args
+        .iter()
+        .position(|arg| arg == "--headless-delete-preview")
+    {
+        let Some(name) = args.get(index + 1) else {
+            eprintln!("Usage: --headless-delete-preview <name>");
+            std::process::exit(2);
+        };
+        match cleanup::preview_profile_delete(name) {
+            Ok(preview) => println!("{preview:#?}"),
+            Err(err) => {
+                eprintln!("{err:#}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    if args.iter().any(|arg| arg == "--headless-unused-mods") {
+        match cleanup::scan_unused_mods(None) {
+            Ok(report) => println!("{report:#?}"),
+            Err(err) => {
+                eprintln!("{err:#}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    if args.iter().any(|arg| arg == "--headless-mod-trash") {
+        match cleanup::list_mod_trash() {
+            Ok(entries) => println!("{entries:#?}"),
+            Err(err) => {
+                eprintln!("{err:#}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    if let Some(index) = args
+        .iter()
+        .position(|arg| arg == "--headless-remove-unused")
+    {
+        let Some(workshop_id) = args.get(index + 1).and_then(|id| id.parse::<u64>().ok()) else {
+            eprintln!("Usage: --headless-remove-unused <workshop_id>");
+            std::process::exit(2);
+        };
+        match cleanup::quarantine_unused_mod(workshop_id, None) {
+            Ok(result) => println!("{result:#?}"),
+            Err(err) => {
+                eprintln!("{err:#}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    if let Some(index) = args
+        .iter()
+        .position(|arg| arg == "--headless-restore-trash")
+    {
+        let Some(id) = args.get(index + 1) else {
+            eprintln!("Usage: --headless-restore-trash <id>");
+            std::process::exit(2);
+        };
+        match cleanup::restore_mod_trash(id) {
+            Ok(entry) => println!("{entry:#?}"),
+            Err(err) => {
+                eprintln!("{err:#}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    if let Some(index) = args
+        .iter()
+        .position(|arg| arg == "--headless-export-profile")
+    {
+        let (Some(name), Some(path)) = (args.get(index + 1), args.get(index + 2)) else {
+            eprintln!("Usage: --headless-export-profile <name> <path>");
+            std::process::exit(2);
+        };
+        match profile_io::export_profile(name, path) {
+            Ok(()) => println!("{path}"),
+            Err(err) => {
+                eprintln!("{err:#}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    if let Some(index) = args
+        .iter()
+        .position(|arg| arg == "--headless-export-all-profiles")
+    {
+        let Some(directory) = args.get(index + 1) else {
+            eprintln!("Usage: --headless-export-all-profiles <directory>");
+            std::process::exit(2);
+        };
+        match profile_io::export_all_profiles(directory) {
+            Ok(result) => println!("{result:#?}"),
+            Err(err) => {
+                eprintln!("{err:#}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    if let Some(index) = args
+        .iter()
+        .position(|arg| arg == "--headless-preview-profile")
+    {
+        let Some(path) = args.get(index + 1) else {
+            eprintln!("Usage: --headless-preview-profile <path>");
+            std::process::exit(2);
+        };
+        match profile_io::preview_profile_import(path) {
+            Ok(preview) => println!("{preview:#?}"),
+            Err(err) => {
+                eprintln!("{err:#}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    if let Some(index) = args
+        .iter()
+        .position(|arg| arg == "--headless-import-profile")
+    {
+        let Some(path) = args.get(index + 1) else {
+            eprintln!("Usage: --headless-import-profile <path> [name]");
+            std::process::exit(2);
+        };
+        let name = args.get(index + 2).cloned();
+        match profile_io::apply_profile_import(path, name, false) {
+            Ok(result) => println!("{result:#?}"),
+            Err(err) => {
+                eprintln!("{err:#}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
     if let Some(index) = args.iter().position(|arg| arg == "--headless-collection") {
         let Some(id) = args.get(index + 1).and_then(|id| id.parse::<u64>().ok()) else {
             eprintln!("Usage: --headless-collection <published_file_id>");
@@ -1270,6 +1504,7 @@ fn main() {
     }
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             get_state,
             save_state,
@@ -1285,7 +1520,18 @@ fn main() {
             delete_category,
             save_profile,
             delete_profile,
+            preview_profile_delete,
+            scan_unused_mods,
+            remove_unused_mod,
+            list_mod_trash,
+            restore_mod_trash,
             get_profile,
+            set_profile_mod_deactivated,
+            restore_profile_mod,
+            export_profile,
+            export_all_profiles,
+            preview_profile_import,
+            apply_profile_import,
             preview_steam_collection,
             create_empty_profile,
             create_profile_from_collection,

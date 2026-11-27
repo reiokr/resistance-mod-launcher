@@ -232,7 +232,7 @@ pub struct AmlGroup {
     pub entries: Vec<AmlMod>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AmlMod {
     #[serde(rename = "ID", default)]
     pub id: String,
@@ -268,6 +268,54 @@ pub struct AmlMod {
     pub ignored_dependencies: Vec<i64>,
 }
 
+fn dedupe_mods(mods: Vec<AmlMod>) -> Vec<AmlMod> {
+    let mut deduped: Vec<AmlMod> = Vec::with_capacity(mods.len());
+    let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for entry in mods {
+        let key = entry.id.to_lowercase();
+        if key.is_empty() {
+            continue;
+        }
+        if let Some(&index) = seen.get(&key) {
+            let existing = &mut deduped[index];
+            if existing.name.is_none() {
+                existing.name = entry.name;
+            }
+            if existing.author.is_none() {
+                existing.author = entry.author;
+            }
+            if existing.description.is_none() {
+                existing.description = entry.description;
+            }
+            if existing.workshop_id.unwrap_or(0) == 0 {
+                existing.workshop_id = entry.workshop_id;
+            }
+            if existing.path.as_deref().map_or(true, str::is_empty) {
+                existing.path = entry.path;
+            }
+            if existing.size == 0 {
+                existing.size = entry.size;
+            }
+            if existing.date_updated.is_none() {
+                existing.date_updated = entry.date_updated;
+            }
+            if existing.dependencies.is_empty() {
+                existing.dependencies = entry.dependencies;
+            }
+            if existing.ignored_dependencies.is_empty() {
+                existing.ignored_dependencies = entry.ignored_dependencies;
+            }
+            if !existing.built_for_wotc {
+                existing.built_for_wotc = entry.built_for_wotc;
+            }
+            continue;
+        }
+        seen.insert(key, deduped.len());
+        deduped.push(entry);
+    }
+    deduped
+}
+
 impl AmlRoot {
     pub fn load(path: &Path) -> Result<Self> {
         let text = fs::read_to_string(path)
@@ -288,7 +336,7 @@ impl AmlRoot {
                 mods.push(entry);
             }
         }
-        mods
+        dedupe_mods(mods)
     }
 
     pub fn active_sorted(&self) -> Vec<AmlMod> {
@@ -1086,6 +1134,28 @@ mod tests {
         assert!(parsed.requires_xpack);
 
         let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn deduplicates_aml_mod_ids() {
+        let mods = vec![
+            AmlMod {
+                id: "SomeMod".to_string(),
+                name: Some("Some Mod".to_string()),
+                ..Default::default()
+            },
+            AmlMod {
+                id: "somemod".to_string(),
+                workshop_id: Some(123),
+                dependencies: vec![456],
+                ..Default::default()
+            },
+        ];
+        let deduped = dedupe_mods(mods);
+        assert_eq!(deduped.len(), 1);
+        assert_eq!(deduped[0].name.as_deref(), Some("Some Mod"));
+        assert_eq!(deduped[0].workshop_id, Some(123));
+        assert_eq!(deduped[0].dependencies, vec![456]);
     }
 
     #[test]

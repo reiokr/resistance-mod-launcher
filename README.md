@@ -149,6 +149,7 @@ The library is UI-free so the Tauri backend can call it directly.
 2. **AML compatibility**
    - import AML's `settings.json` read-only and own the active state — done;
    - profiles/categories — done (native `state.json`);
+   - profile export/import to a portable JSON file — done (single and all profiles);
    - automatic categories from Workshop tags/name/description — done;
    - learning from manual category corrections (Naive Bayes) — done;
    - duplicate ID, class-override and missing-dependency checks — done;
@@ -163,7 +164,9 @@ The library is UI-free so the Tauri backend can call it directly.
    - missing dependency titles/tags from the Workshop API — done;
    - Steam Workshop collection import into profiles — done (installed mods
      matched by Workshop ID, missing mods linked to Steam);
-   - optional native subscribe/unsubscribe via Steamworks — later.
+   - profile deletion impact and unused Workshop mod report — done;
+   - unused mods can be moved to the system trash, with in-app list/restore — done;
+   - unsubscribe/resubscribe stays manual in Steam for now.
 4. **Native Linux build**
    - Feral VFS paths (`~/.local/share/feral-interactive/...`);
    - native `share/data/xcomgame/mods`.

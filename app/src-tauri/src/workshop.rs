@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
-use xcom2_launcher_core::{AmlRoot, SteamPaths, discover_paths};
+use xcom2_launcher_core::{SteamPaths, discover_paths, scan_workshop_mods};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct WorkshopDetails {
@@ -426,6 +426,39 @@ pub fn preview_collection(id: u64) -> Result<CollectionPreview> {
         .iter()
         .filter_map(|entry| entry.workshop_id.filter(|id| *id > 0).map(|id| (id, entry)))
         .collect();
+    let by_internal: HashMap<String, &xcom2_launcher_core::AmlMod> = mods
+        .iter()
+        .map(|entry| (entry.id.to_lowercase(), entry))
+        .collect();
+    // Some Workshop entries are alternate copies of the same internal mod
+    // (same .XComMod id, different published file id). Match by the .XComMod
+    // id as a fallback so a subscribed mod is not reported missing just
+    // because AML/settings.json refers to another copy.
+    let mut folder_internal: HashMap<u64, String> = HashMap::new();
+    if let Some(workshop_dir) = paths.workshop_dir.as_deref() {
+        if let Ok(index) = scan_workshop_mods(workshop_dir) {
+            for file in index.by_path.values() {
+                let dir = if file.path.is_dir() {
+                    file.path.as_path()
+                } else {
+                    match file.path.parent() {
+                        Some(parent) => parent,
+                        None => continue,
+                    }
+                };
+                let Some(folder_id) = dir
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .and_then(|name| name.parse::<u64>().ok())
+                else {
+                    continue;
+                };
+                if !file.internal_id.is_empty() {
+                    folder_internal.insert(folder_id, file.internal_id.clone());
+                }
+            }
+        }
+    }
 
     let mut items = Vec::new();
     let mut installed = 0usize;
@@ -434,7 +467,12 @@ pub fn preview_collection(id: u64) -> Result<CollectionPreview> {
     for child_id in ids {
         let details = cache.items.get(&child_id.to_string());
         let app_id = details.and_then(|details| details.consumer_app_id);
-        let entry = by_workshop.get(&child_id).copied();
+        let entry = by_workshop.get(&child_id).copied().or_else(|| {
+            folder_internal
+                .get(&child_id)
+                .and_then(|internal| by_internal.get(&internal.to_lowercase()))
+                .copied()
+        });
         let installed_dir = entry
             .and_then(|entry| crate::mod_paths::entry_path(entry, &paths))
             .is_some();
@@ -487,14 +525,10 @@ pub fn preview_collection(id: u64) -> Result<CollectionPreview> {
 
 pub fn refresh() -> Result<WorkshopRefresh> {
     let paths = discover_paths()?;
-    let settings_path = paths
-        .settings
-        .clone()
-        .context("AML settings.json was not found")?;
-    let settings = AmlRoot::load(&settings_path)?;
+    let settings = crate::catalog::load_with_paths(&paths)?;
 
     let mut ids: Vec<u64> = settings
-        .all_mods_with_workshop(paths.workshop_dir.as_deref())?
+        .all_mods()
         .into_iter()
         .filter_map(|entry| entry.workshop_id.filter(|id| *id > 0))
         .collect::<HashSet<_>>()
@@ -503,7 +537,7 @@ pub fn refresh() -> Result<WorkshopRefresh> {
     ids.sort_unstable();
 
     if ids.is_empty() {
-        anyhow::bail!("No Workshop IDs found in AML settings.");
+        anyhow::bail!("No Workshop IDs found in the mod catalog.");
     }
 
     let mut cache = load_cache()?;

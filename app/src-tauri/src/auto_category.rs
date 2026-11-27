@@ -3,12 +3,12 @@
 //! never modified.
 
 use crate::workshop::{self, WorkshopCache};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
-use xcom2_launcher_core::{AmlMod, AmlRoot, discover_paths};
+use xcom2_launcher_core::{AmlMod, discover_paths};
 
 const CATEGORY_ORDER: &[&str] = &[
     "Amalgamation",
@@ -732,12 +732,8 @@ fn build_plan(
     overwrite: bool,
 ) -> Result<Plan> {
     let paths = discover_paths()?;
-    let settings_path = paths
-        .settings
-        .clone()
-        .context("AML settings.json was not found")?;
-    let settings = AmlRoot::load(&settings_path)?;
-    let all = settings.all_mods_with_workshop(paths.workshop_dir.as_deref())?;
+    let settings = crate::catalog::load_with_paths(&paths)?;
+    let all = settings.all_mods();
     let model = crate::category_learning::train(&state.category_feedback, &all, cache);
 
     let mut assignments = Vec::new();

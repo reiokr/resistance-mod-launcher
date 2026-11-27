@@ -46,6 +46,8 @@ pub struct Profile {
     pub pending_workshop_ids: Vec<u64>,
     #[serde(default)]
     pub excluded_workshop_ids: Vec<u64>,
+    #[serde(default)]
+    pub deactivated_mod_ids: Vec<String>,
     pub updated: i64,
 }
 
@@ -84,6 +86,7 @@ pub struct ProfileView {
     pub source_title: Option<String>,
     pub source_id: Option<u64>,
     pub source_url: Option<String>,
+    pub deactivated_mod_ids: Vec<String>,
     pub updated: i64,
 }
 
@@ -221,6 +224,7 @@ pub fn profile_views(state: &PersistedState) -> Vec<ProfileView> {
             source_title: profile.source.as_ref().map(|source| source.title.clone()),
             source_id: profile.source.as_ref().map(|source| source.id),
             source_url: profile.source.as_ref().map(|source| source.url.clone()),
+            deactivated_mod_ids: profile.deactivated_mod_ids.clone(),
             updated: profile.updated,
         })
         .collect();
@@ -366,6 +370,10 @@ pub fn save_profile(state: &mut PersistedState, name: &str, active_ids: Vec<Stri
         .find(|profile| profile.name == name)
     {
         profile.active_ids = active_ids;
+        let active: HashSet<String> = profile.active_ids.iter().cloned().collect();
+        profile
+            .deactivated_mod_ids
+            .retain(|id| !active.contains(id));
         profile.updated = updated;
     } else {
         state.profiles.push(Profile {
@@ -376,10 +384,59 @@ pub fn save_profile(state: &mut PersistedState, name: &str, active_ids: Vec<Stri
             collection_children: Vec::new(),
             pending_workshop_ids: Vec::new(),
             excluded_workshop_ids: Vec::new(),
+            deactivated_mod_ids: Vec::new(),
             updated,
         });
     }
     Ok(())
+}
+
+/// Record or clear an explicit deactivation for a profile. A mod is only
+/// recorded when it belongs to the profile's saved list; activating a mod that
+/// was never in the profile is a no-op.
+pub fn set_profile_mod_deactivated(
+    state: &mut PersistedState,
+    name: &str,
+    mod_id: &str,
+    deactivated: bool,
+) -> Result<Vec<String>> {
+    let profile = state
+        .profiles
+        .iter_mut()
+        .find(|profile| profile.name == name)
+        .with_context(|| format!("Profile not found: {name}"))?;
+    if deactivated {
+        if profile.active_ids.iter().any(|id| id == mod_id)
+            && !profile.deactivated_mod_ids.iter().any(|id| id == mod_id)
+        {
+            profile.deactivated_mod_ids.push(mod_id.to_string());
+        }
+    } else {
+        profile.deactivated_mod_ids.retain(|id| id != mod_id);
+    }
+    profile.updated = now();
+    Ok(profile.deactivated_mod_ids.clone())
+}
+
+/// Restore a deactivated mod to a profile: clear the explicit deactivation and
+/// make sure it belongs to the profile's saved list again. Returns the updated
+/// active list so the UI can keep the load order.
+pub fn restore_profile_mod(
+    state: &mut PersistedState,
+    name: &str,
+    mod_id: &str,
+) -> Result<Vec<String>> {
+    let profile = state
+        .profiles
+        .iter_mut()
+        .find(|profile| profile.name == name)
+        .with_context(|| format!("Profile not found: {name}"))?;
+    profile.deactivated_mod_ids.retain(|id| id != mod_id);
+    if !mod_id.is_empty() && !profile.active_ids.iter().any(|id| id == mod_id) {
+        profile.active_ids.push(mod_id.to_string());
+    }
+    profile.updated = now();
+    Ok(profile.active_ids.clone())
 }
 
 pub fn create_profile(state: &mut PersistedState, mut profile: Profile) -> Result<()> {
@@ -485,6 +542,7 @@ mod tests {
                 collection_children: vec![1, 2, 3],
                 pending_workshop_ids: vec![2, 3],
                 excluded_workshop_ids: Vec::new(),
+                deactivated_mod_ids: Vec::new(),
                 updated: 0,
             },
         )
@@ -500,6 +558,7 @@ mod tests {
                     collection_children: Vec::new(),
                     pending_workshop_ids: Vec::new(),
                     excluded_workshop_ids: Vec::new(),
+                    deactivated_mod_ids: Vec::new(),
                     updated: 0,
                 }
             )
@@ -533,5 +592,46 @@ mod tests {
         assert_eq!(profile.active_ids.len(), 2);
         assert_eq!(profile.source.as_ref().map(|s| s.id), Some(42));
         assert_eq!(profile.pending_workshop_ids, vec![2, 3]);
+    }
+
+    #[test]
+    fn profile_deactivations_are_recorded_and_restored() {
+        let mut state = PersistedState::default();
+        create_profile(
+            &mut state,
+            Profile {
+                name: "LWOTC".to_string(),
+                description: None,
+                active_ids: vec!["ModA".to_string(), "ModB".to_string()],
+                source: None,
+                collection_children: Vec::new(),
+                pending_workshop_ids: Vec::new(),
+                excluded_workshop_ids: Vec::new(),
+                deactivated_mod_ids: Vec::new(),
+                updated: 0,
+            },
+        )
+        .unwrap();
+
+        let deactivated = set_profile_mod_deactivated(&mut state, "LWOTC", "ModB", true).unwrap();
+        assert_eq!(deactivated, vec!["ModB".to_string()]);
+        assert_eq!(
+            profile_views(&state)[0].deactivated_mod_ids,
+            vec!["ModB".to_string()]
+        );
+
+        // A mod that is not part of the profile is not recorded.
+        let deactivated = set_profile_mod_deactivated(&mut state, "LWOTC", "ModC", true).unwrap();
+        assert_eq!(deactivated, vec!["ModB".to_string()]);
+
+        save_profile(&mut state, "LWOTC", vec!["ModA".to_string()]).unwrap();
+        let profile = state.profiles.iter().find(|p| p.name == "LWOTC").unwrap();
+        assert_eq!(profile.active_ids, vec!["ModA".to_string()]);
+        assert_eq!(profile.deactivated_mod_ids, vec!["ModB".to_string()]);
+
+        let active_ids = restore_profile_mod(&mut state, "LWOTC", "ModB").unwrap();
+        assert_eq!(active_ids, vec!["ModA".to_string(), "ModB".to_string()]);
+        let profile = state.profiles.iter().find(|p| p.name == "LWOTC").unwrap();
+        assert!(profile.deactivated_mod_ids.is_empty());
     }
 }
