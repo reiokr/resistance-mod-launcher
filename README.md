@@ -16,6 +16,25 @@ Source: <https://github.com/reiokr/resistance-mod-launcher> ·
 [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) ·
 [Third-party notices](THIRD_PARTY_NOTICES.md)
 
+## Before you start
+
+| Requirement | Required? | Why |
+|---|---|---|
+| XCOM 2: War of the Chosen in Steam | **Yes** | The game and its Proton prefix are required. |
+| Steam running | **Yes for launch** | Needed for launching and Workshop subscriptions. |
+| Proton prefix for app 268500 | **Yes** | Game configs and mod paths live inside it. |
+| AML (Alternative Mod Launcher) | **Recommended** | Full metadata, categories and dependency data. |
+| AML `settings.json` | **Optional** | Since v0.2.4 the launcher falls back to its native catalog. |
+
+**AML is not strictly required.** When installed, the launcher imports AML's
+`settings.json` for mod names, authors, categories and dependencies. Without
+it, mods are discovered from Steam Workshop folders and `.XComMod` files;
+profiles, load order, conflict checks, export/import and cleanup still work.
+Dependency data may be incomplete without AML.
+
+Close AML before pressing **Save** or **Launch**: the launcher refuses to write
+the config or start the game while AML or XCOM 2 is running.
+
 ## Download
 
 The latest AppImage is available on the
@@ -36,13 +55,23 @@ The latest AppImage is available on the
 
 SHA-256 checksums are attached to every release as `SHA256SUMS`.
 
+## If something is missing
+
+- **No mods appear?** Check that Steam and the correct library are detected,
+  then press **Refresh Workshop**.
+- **`settings.json` is missing?** This is not fatal since v0.2.4; the native
+  catalog and Workshop folders are used instead.
+- **Save is blocked?** Close AML or XCOM 2.
+- **Dependencies look incomplete?** Install AML or import its `settings.json`
+  once.
+
 ## What works
 
 The `aml-preview` binary:
 
 - discovers Steam libraries (native, Flatpak, Snap), the XCOM 2 install, the
   Proton prefix and the AML directory;
-- imports AML's `settings.json` (all 792 mods, active state, load order);
+- imports AML's `settings.json` when present (all 792 mods, active state, load order);
 - scans `steamapps/workshop/content/268500` and merges newly subscribed mods
   that are not in AML's settings yet;
 - parses `.XComMod` metadata;

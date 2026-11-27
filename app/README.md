@@ -5,11 +5,25 @@ Native Linux UI for the `xcom2-launcher-core` crate.
 Status: **MVP**, tested against a 792-mod / 790-active War of the Chosen
 install.
 
+## Before you start
+
+- **Required:** XCOM 2: War of the Chosen via Steam and an existing Proton
+  prefix (app 268500).
+- **Recommended:** AML (Alternative Mod Launcher). If present, its
+  `settings.json` supplies mod names, authors, categories and dependencies.
+- **Optional:** AML's `settings.json` itself. Since v0.2.4 the native catalog
+  and Steam Workshop folders are enough for the mod list, profiles, load order,
+  conflict checks, export/import and cleanup.
+- Close AML or XCOM 2 before saving or launching.
+
+See the [root README](../README.md) for the full requirement table and a short
+troubleshooting checklist.
+
 ## What it does
 
 - Estonian and English UI with an `ET`/`EN` toggle in the top bar.
-- Imports AML's `settings.json` for mod metadata (name, author, category,
-  workshop ID, size, path) and merges new Workshop folders from
+- Imports AML's `settings.json` when present for mod metadata (name, author,
+  category, workshop ID, size, path) and merges new Workshop folders from
   `steamapps/workshop/content/268500` on launch, so a newly subscribed mod
   appears before AML has refreshed its own settings. New mods start inactive
   and in `Unsorted`.
