@@ -526,7 +526,7 @@ mod tests {
             format: FORMAT.to_string(),
             version: VERSION,
             exported_at: 1,
-            app_version: "0.3.0".to_string(),
+            app_version: "0.3.1".to_string(),
             game: GAME.to_string(),
             workshop_app_id: APP_ID,
             profile: ProfileData {

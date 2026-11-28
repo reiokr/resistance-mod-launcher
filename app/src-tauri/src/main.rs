@@ -361,6 +361,93 @@ fn print_mod_root_check(paths: &SteamPaths) {
     }
 }
 
+fn check_workshop_path(paths: &SteamPaths) -> Option<WorkshopPathWarning> {
+    let config_dir = paths.wotc_config.as_deref()?;
+    let text = fs::read_to_string(config_dir.join("XComEngine.ini")).ok()?;
+    let roots = mod_root_dirs(&text);
+    if roots.is_empty() {
+        return None;
+    }
+    let expected = paths.workshop_dir.as_deref()?;
+    let expected = canonical_or_self(expected);
+    let prefix = paths.prefix.as_deref()?;
+    let dosdevices = prefix.join("dosdevices");
+    let mut first_bad = None;
+
+    for raw in roots {
+        let Some(drive) = windows_drive(&raw) else {
+            continue;
+        };
+        let link = dosdevices.join(format!("{drive}:"));
+        let target = fs::read_link(&link)
+            .ok()
+            .map(|target| {
+                if target.is_absolute() {
+                    target
+                } else {
+                    dosdevices.join(target)
+                }
+            })
+            .or_else(|| link.is_dir().then(|| link.clone()));
+        let fix_command = {
+            let fix_target = if drive == 'z' {
+                Some(PathBuf::from("/"))
+            } else {
+                paths.library.clone()
+            };
+            fix_target.map(|target| {
+                format!(
+                    "ln -sfn {} {}",
+                    doctor_shell_path(&target),
+                    doctor_shell_path(&link)
+                )
+            })
+        };
+
+        let Some(target) = target else {
+            if first_bad.is_none() {
+                first_bad = Some(WorkshopPathWarning {
+                    kind: "drive_missing".to_string(),
+                    mod_root: raw,
+                    drive: format!("{drive}:"),
+                    drive_link: link.display().to_string(),
+                    drive_target: None,
+                    game_workshop: None,
+                    launcher_workshop: Some(expected.display().to_string()),
+                    fix_command,
+                });
+            }
+            continue;
+        };
+
+        let mapped = map_windows_path(&raw, Some(prefix));
+        if let Some(mapped) = mapped.as_deref() {
+            if canonical_or_self(mapped) == expected {
+                return None;
+            }
+        }
+        if first_bad.is_none() {
+            let kind = if target.is_dir() {
+                "workshop_mismatch"
+            } else {
+                "target_missing"
+            };
+            first_bad = Some(WorkshopPathWarning {
+                kind: kind.to_string(),
+                mod_root: raw,
+                drive: format!("{drive}:"),
+                drive_link: link.display().to_string(),
+                drive_target: Some(target.display().to_string()),
+                game_workshop: mapped.as_ref().map(|path| path.display().to_string()),
+                launcher_workshop: Some(expected.display().to_string()),
+                fix_command,
+            });
+        }
+    }
+
+    first_bad
+}
+
 fn print_doctor() {
     println!("Resistance Mod Launcher {}", env!("CARGO_PKG_VERSION"));
     println!(
@@ -928,10 +1015,23 @@ fn get_mod_readme(mod_id: String) -> Result<readme::ReadmeContent, String> {
 }
 
 #[derive(Debug, Serialize)]
+struct WorkshopPathWarning {
+    kind: String,
+    mod_root: String,
+    drive: String,
+    drive_link: String,
+    drive_target: Option<String>,
+    game_workshop: Option<String>,
+    launcher_workshop: Option<String>,
+    fix_command: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
 struct RuntimeStatus {
     steam_running: bool,
     aml_running: bool,
     game_running: bool,
+    workshop_path_warning: Option<WorkshopPathWarning>,
 }
 
 #[tauri::command]
@@ -960,10 +1060,14 @@ async fn clear_profile_cover(name: String) -> Result<(), String> {
 
 #[tauri::command]
 fn runtime_status() -> RuntimeStatus {
+    let workshop_path_warning = discover_paths()
+        .ok()
+        .and_then(|paths| check_workshop_path(&paths));
     RuntimeStatus {
         steam_running: steam_running(),
         aml_running: aml_running(),
         game_running: game_running(),
+        workshop_path_warning,
     }
 }
 
@@ -1955,6 +2059,50 @@ mod doctor_tests {
         assert_eq!(windows_drive("Z:/mnt/steam"), Some('z'));
         assert_eq!(windows_drive(r"\steamapps"), None);
         assert_eq!(windows_drive("/mnt/steam"), None);
+    }
+
+    #[test]
+    fn detects_moved_workshop_library() {
+        let base = std::env::temp_dir().join(format!("xcom-workshop-check-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        let prefix = base.join("pfx");
+        let config = base.join("config");
+        let library = base.join("library");
+        let old_library = base.join("old-library");
+        fs::create_dir_all(prefix.join("dosdevices")).unwrap();
+        fs::create_dir_all(&config).unwrap();
+        fs::create_dir_all(library.join("steamapps/workshop/content/268500")).unwrap();
+        fs::write(
+            config.join("XComEngine.ini"),
+            "ModRootDirs=S:\\steamapps\\workshop\\content\\268500\\\n",
+        )
+        .unwrap();
+        let link = prefix.join("dosdevices/s:");
+        std::os::unix::fs::symlink(&old_library, &link).unwrap();
+
+        let paths = SteamPaths {
+            prefix: Some(prefix.clone()),
+            wotc_config: Some(config),
+            workshop_dir: Some(library.join("steamapps/workshop/content/268500")),
+            library: Some(library.clone()),
+            ..Default::default()
+        };
+
+        let warning = check_workshop_path(&paths).expect("expected a warning");
+        assert_eq!(warning.kind, "target_missing");
+        assert!(
+            warning
+                .fix_command
+                .as_deref()
+                .unwrap_or("")
+                .contains("dosdevices/s:")
+        );
+
+        fs::remove_file(&link).unwrap();
+        std::os::unix::fs::symlink(&library, &link).unwrap();
+        assert!(check_workshop_path(&paths).is_none());
+
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]

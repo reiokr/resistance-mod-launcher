@@ -4,13 +4,15 @@
     currentProfile,
     busy,
     busyText,
+    error,
+    message,
+    launchIssue,
     gameConfigDirty,
     diagnosticsFresh,
     coverUrls = {},
     t,
     onSelectProfile,
     onStart,
-    onAdvanced,
     onManageProfiles,
     onChecks,
     onOpenWorkshop,
@@ -64,15 +66,38 @@
       </div>
       <div class="hero-actions">
         <button class="link-button" onclick={onManageProfiles}>{t("Halda profiile")}</button>
-        <button class="link-button" onclick={onAdvanced}>{t("Täisvaade")}</button>
       </div>
     </section>
+
+    {#if launchIssue}
+      <div class="simple-alert error">
+        <strong>{t("Mängu ei käivitatud.")}</strong>
+        <p>{t("XComEngine.ini Workshopi tee ei klapi launcheriga.")}</p>
+        <div class="alert-details">
+          <span>ModRootDirs: {launchIssue.mod_root}</span>
+          {#if launchIssue.drive_target}
+            <span>{launchIssue.drive} → {launchIssue.drive_target}</span>
+          {/if}
+          {#if launchIssue.launcher_workshop}
+            <span>{t("Launcheri Workshop:")} {launchIssue.launcher_workshop}</span>
+          {/if}
+        </div>
+        {#if launchIssue.fix_command}
+          <pre>{launchIssue.fix_command}</pre>
+        {/if}
+        <p class="alert-hint">{t("Käivita paranduskäsk terminalis ja proovi uuesti.")}</p>
+      </div>
+    {:else if error}
+      <div class="simple-alert error">{error}</div>
+    {:else if message}
+      <div class="simple-alert info">{message}</div>
+    {/if}
 
     {#if (snapshot?.profiles ?? []).length === 0}
       <div class="empty-card">
         <strong>{t("Sul pole veel profiile.")}</strong>
-        <p>{t("Ava täisvaade, et profiil luua või Steam Workshopi kollektsioon importida.")}</p>
-        <button class="primary-button" onclick={onAdvanced}>{t("Ava täisvaade")}</button>
+        <p>{t("Ava profiilid, et profiil luua või Steam Workshopi kollektsioon importida.")}</p>
+        <button class="primary-button" onclick={onManageProfiles}>{t("Halda profiile")}</button>
       </div>
     {:else}
       <section class="profile-grid" aria-label={t("Profiilid")}>
@@ -245,7 +270,6 @@
                   {t("Ava Steamis")}
                 </button>
               {/if}
-              <button class="secondary-action" onclick={onAdvanced}>{t("Täisvaade")}</button>
             </div>
           </div>
           </div>
@@ -715,6 +739,61 @@
     color: #06140c;
     font-weight: 700;
     cursor: pointer;
+  }
+
+  .simple-alert {
+    margin: 0 0 16px;
+    padding: 12px 14px;
+    border: 1px solid rgba(255, 107, 107, 0.35);
+    border-radius: 11px;
+    background: rgba(255, 107, 107, 0.08);
+    color: #ffbcbc;
+    font-size: 12px;
+  }
+
+  .simple-alert strong {
+    display: block;
+    margin-bottom: 4px;
+    color: #ffd2d2;
+    font-size: 13px;
+  }
+
+  .simple-alert p {
+    margin: 0 0 6px;
+  }
+
+  .simple-alert.info {
+    border-color: rgba(43, 179, 255, 0.3);
+    background: rgba(43, 179, 255, 0.07);
+    color: #9fd7ff;
+  }
+
+  .alert-details {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 8px 0;
+    color: #e0b4b4;
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    font-size: 11px;
+    word-break: break-all;
+  }
+
+  .simple-alert pre {
+    margin: 8px 0 6px;
+    padding: 8px 10px;
+    border-radius: 7px;
+    background: #0b1017;
+    color: #f3d28a;
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  .alert-hint {
+    margin: 0;
+    color: #c99;
+    font-size: 11px;
   }
 
   .empty-card,

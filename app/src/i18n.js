@@ -2,6 +2,16 @@
 // A missing key falls back to the Estonian text, so new strings are safe.
 
 export const en = {
+  "Mängu ei käivitatud.": "Game not launched.",
+  "Mängu ei käivitatud: XComEngine.ini Workshopi tee ei klapi launcheriga.":
+    "Game not launched: the Workshop path in XComEngine.ini does not match the launcher.",
+  "XComEngine.ini Workshopi tee ei klapi launcheriga.":
+    "The Workshop path in XComEngine.ini does not match the launcher.",
+  "Launcheri Workshop:": "Launcher Workshop:",
+  "Parandus:": "Fix:",
+  "Käivita paranduskäsk terminalis ja proovi uuesti.":
+    "Run the fix command in a terminal and try again.",
+
   "Lihtvaade": "Simple view",
   "Ava lihtvaade: ainult profiilid ja Start":
     "Open simple view: profiles and Start only",
@@ -65,8 +75,8 @@ export const en = {
   "AML on lahti. Sulge AML enne käivitamist.":
     "AML is open. Close AML before launching.",
   "Ava täisvaade": "Open advanced view",
-  "Ava täisvaade, et profiil luua või Steam Workshopi kollektsioon importida.":
-    "Open the advanced view to create a profile or import a Steam Workshop collection.",
+  "Ava profiilid, et profiil luua või Steam Workshopi kollektsioon importida.":
+    "Open profiles to create a profile or import a Steam Workshop collection.",
   "Halda profiile": "Manage profiles",
   "Kontroll on aegunud või veel tegemata.":
     "The check is stale or has not been run yet.",

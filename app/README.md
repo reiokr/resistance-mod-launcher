@@ -230,8 +230,9 @@ cargo run -- --headless-diagnostics
   profiles, load order, categories, diagnostics and config editing. Simple
   shows only profile cards and the Start button; open it with **Simple view**
   in the top bar or the footer. The mode is remembered. Simple Start applies
-  and saves the selected profile before launching. Once a profile is configured,
-  the Profiles tab offers the simple view once with a dismissible hint.
+  and saves the selected profile before launching, and checks the Workshop drive
+  mapping first. Once a profile is configured, the Profiles tab offers the
+  simple view once with a dismissible hint.
 - **Modid** tab: all 792 mods; checkbox toggles active state; click a row for
   details. Filters: status, native category, and Workshop tag (tags used by at
   least two mods). Search also matches Workshop tags.

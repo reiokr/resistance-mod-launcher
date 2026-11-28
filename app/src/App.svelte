@@ -12,6 +12,7 @@
   let busyText = $state("");
   let error = $state("");
   let message = $state("");
+  let launchIssue = $state(null);
   let query = $state("");
   let stateFilter = $state("all");
   let categoryFilter = $state("all");
@@ -149,7 +150,7 @@
   let readmeLoading = $state(false);
   let readmeError = $state("");
   let aboutOpen = $state(false);
-  let appVersion = $state("0.3.0");
+  let appVersion = $state("0.3.1");
 
   onMount(() => {
     document.documentElement.lang = lang;
@@ -451,6 +452,16 @@
   }
 
   async function launch() {
+    launchIssue = null;
+    try {
+      const status = await invoke("runtime_status");
+      if (status.workshop_path_warning) {
+        setWorkshopWarning(status.workshop_path_warning);
+        return;
+      }
+    } catch {
+      // If the check itself fails, let the normal launch path report the error.
+    }
     if (gameConfigDirty) {
       const ok = window.confirm(
         t("Aktiivne nimekiri on veel mängu configusse salvestamata. Kas salvestada enne käivitamist?\n\nOK = salvesta ja käivita\nCancel = katkesta")
@@ -1270,6 +1281,7 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
 
   async function applyProfile(name, skipConfirm = false) {
     editingProfile = null;
+    launchIssue = null;
     if (
       !skipConfirm &&
       currentProfile &&
@@ -1339,6 +1351,7 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     busyText = t("Rakendan profiili…");
     error = "";
     message = "";
+    launchIssue = null;
     try {
       const profileView = snapshot?.profiles.find(
         (entry) => entry.name === name
@@ -1614,10 +1627,23 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     message = t("Muutmine lõpetatud.");
   }
 
+  function setWorkshopWarning(warning) {
+    launchIssue = warning;
+    let text = t(
+      "Mängu ei käivitatud: XComEngine.ini Workshopi tee ei klapi launcheriga."
+    );
+    if (warning.fix_command) {
+      text += " " + t("Parandus:") + " " + warning.fix_command;
+    }
+    error = text;
+    message = "";
+  }
+
   async function startCurrentProfile() {
     if (!currentProfile || busy) return;
     error = "";
     message = "";
+    launchIssue = null;
     busy = true;
     busyText = t("Kontrollin olekut…");
     let status = null;
@@ -1643,6 +1669,10 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     }
     if (status.game_running) {
       error = t("XCOM 2 töötab juba.");
+      return;
+    }
+    if (status.workshop_path_warning) {
+      setWorkshopWarning(status.workshop_path_warning);
       return;
     }
     if (snapshot.summary.missing > 0) {
@@ -2116,10 +2146,10 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     </div>
   {/if}
 
-  {#if error}
+  {#if uiMode === "advanced" && error}
     <div class="banner error">{error}</div>
   {/if}
-  {#if message}
+  {#if uiMode === "advanced" && message}
     <div class="banner info">{message}</div>
   {/if}
 
@@ -2154,13 +2184,15 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
       {currentProfile}
       {busy}
       {busyText}
+      {error}
+      {message}
+      {launchIssue}
       {gameConfigDirty}
       diagnosticsFresh={diagnosticsFresh()}
       coverUrls={profileCovers}
       {t}
       onSelectProfile={(name) => applyProfileForSimple(name)}
       onStart={startCurrentProfile}
-      onAdvanced={() => setUiMode("advanced")}
       onManageProfiles={openManageProfiles}
       onChecks={openChecksFromSimple}
       onOpenWorkshop={(id) => invoke("open_workshop", { id })}
@@ -3133,11 +3165,6 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
       <span title={snapshot.paths.config ?? ""}>Config: {snapshot.paths.config ?? "—"}</span>
       <span title={snapshot.paths.backup_dir}>Backup: {snapshot.paths.backup_dir}</span>
       <span title={snapshot.paths.workshop_dir ?? ""}>Workshop: {snapshot.paths.workshop_dir ?? "—"}</span>
-      <button
-        class="status-info"
-        onclick={() => setUiMode("simple")}
-        title={t("Lülita lihtvaatesse")}
-      >{t("Lihtvaade")}</button>
       <button class="status-info" onclick={() => (aboutOpen = true)}>{t("Info")}</button>
     </footer>
   {/if}

@@ -223,7 +223,9 @@ load order, profiles, categories, diagnostics and config editing. **Simple**
 shows only the profile cards and the Start button for day-to-day modpack
 switching; open it with **Simple view** in the top bar or the footer. The mode
 is remembered. Once a profile is configured, the Profiles tab offers the simple
-view once with a dismissible hint.
+view once with a dismissible hint. Before launching, the app checks that the
+game's `ModRootDirs` drive resolves to the same Workshop folder as the launcher;
+if it does not, the launch is blocked and the exact `ln -sfn` fix is shown.
 
 The UI ships with Estonian and English translations. The `EN`/`ET` button in
 the top bar switches languages; the choice is stored locally.

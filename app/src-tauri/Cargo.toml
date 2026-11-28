@@ -1,6 +1,6 @@
 [package]
 name = "xcom2-mod-launcher"
-version = "0.3.0"
+version = "0.3.1"
 description = "Native Linux mod launcher for XCOM 2"
 edition = "2024"
 license = "GPL-3.0-only"
