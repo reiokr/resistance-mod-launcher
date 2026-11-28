@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use xcom2_launcher_core::{
     APP_ID, AmlMod, SteamPaths, build_active_mods, default_mod_options_timestamp, discover_paths,
@@ -1058,6 +1058,53 @@ async fn clear_profile_cover(name: String) -> Result<(), String> {
         .map_err(|err| format!("{err:#}"))
 }
 
+fn start_steam_impl() -> Result<bool> {
+    if steam_running() {
+        return Ok(true);
+    }
+
+    let mut launched = false;
+    if command_in_path("steam") {
+        if Command::new("steam").spawn().is_ok() {
+            launched = true;
+        }
+    }
+    if !launched && command_in_path("flatpak") {
+        if Command::new("flatpak")
+            .args(["run", "com.valvesoftware.Steam"])
+            .spawn()
+            .is_ok()
+        {
+            launched = true;
+        }
+    }
+    if !launched && command_in_path("snap") {
+        if Command::new("snap").args(["run", "steam"]).spawn().is_ok() {
+            launched = true;
+        }
+    }
+    if !launched {
+        bail!("Steam executable was not found.");
+    }
+
+    for _ in 0..120 {
+        if steam_running() {
+            std::thread::sleep(Duration::from_secs(2));
+            return Ok(true);
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+    Ok(false)
+}
+
+#[tauri::command]
+async fn start_steam() -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(start_steam_impl)
+        .await
+        .map_err(|err| format!("Steam start task failed: {err}"))?
+        .map_err(|err| format!("{err:#}"))
+}
+
 #[tauri::command]
 fn runtime_status() -> RuntimeStatus {
     let workshop_path_warning = discover_paths()
@@ -2012,6 +2059,7 @@ fn main() {
             set_profile_cover,
             clear_profile_cover,
             runtime_status,
+            start_steam,
             open_url,
             open_workshop,
             set_mod_category,

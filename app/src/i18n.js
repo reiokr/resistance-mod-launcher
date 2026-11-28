@@ -2,6 +2,12 @@
 // A missing key falls back to the Estonian text, so new strings are safe.
 
 export const en = {
+  "Käivitan Steami…": "Starting Steam…",
+  "Steami käivitamine ebaõnnestus. Käivita Steam käsitsi.":
+    "Could not start Steam. Start Steam manually.",
+  "Steami käivitamine ebaõnnestus: {error}":
+    "Could not start Steam: {error}",
+
   "Mängu ei käivitatud.": "Game not launched.",
   "Mängu ei käivitatud: XComEngine.ini Workshopi tee ei klapi launcheriga.":
     "Game not launched: the Workshop path in XComEngine.ini does not match the launcher.",

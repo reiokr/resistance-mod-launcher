@@ -31,7 +31,7 @@ imported on another machine, so a modpack is no longer tied to one installation.
 | Requirement | Required? | Why |
 |---|---|---|
 | XCOM 2: War of the Chosen in Steam | **Yes** | The game and its Proton prefix are required. |
-| Steam running | **Yes for launch** | Needed for launching and Workshop subscriptions. |
+| Steam running | **Yes for launch** | Started automatically by the launcher if needed. |
 | Proton prefix for app 268500 | **Yes** | Game configs and mod paths live inside it. |
 | AML (Alternative Mod Launcher) | **Recommended** | Full metadata, categories and dependency data. |
 | AML `settings.json` | **Optional** | Since v0.2.4 the launcher falls back to its native catalog. |
@@ -225,7 +225,9 @@ switching; open it with **Simple view** in the top bar or the footer. The mode
 is remembered. Once a profile is configured, the Profiles tab offers the simple
 view once with a dismissible hint. Before launching, the app checks that the
 game's `ModRootDirs` drive resolves to the same Workshop folder as the launcher;
-if it does not, the launch is blocked and the exact `ln -sfn` fix is shown.
+if it does not, the launch is blocked and the exact `ln -sfn` fix is shown. If
+Steam is not running, the launcher starts it and waits up to 60 seconds before
+continuing.
 
 The UI ships with Estonian and English translations. The `EN`/`ET` button in
 the top bar switches languages; the choice is stored locally.

@@ -150,7 +150,7 @@
   let readmeLoading = $state(false);
   let readmeError = $state("");
   let aboutOpen = $state(false);
-  let appVersion = $state("0.3.1");
+  let appVersion = $state("0.3.2");
 
   onMount(() => {
     document.documentElement.lang = lang;
@@ -462,6 +462,7 @@
     } catch {
       // If the check itself fails, let the normal launch path report the error.
     }
+    if (!(await ensureSteam())) return;
     if (gameConfigDirty) {
       const ok = window.confirm(
         t("Aktiivne nimekiri on veel mängu configusse salvestamata. Kas salvestada enne käivitamist?\n\nOK = salvesta ja käivita\nCancel = katkesta")
@@ -1639,6 +1640,38 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     message = "";
   }
 
+  async function ensureSteam(status = null) {
+    if (!status) {
+      try {
+        status = await invoke("runtime_status");
+      } catch {
+        return true;
+      }
+    }
+    if (status.steam_running) return true;
+
+    busy = true;
+    busyText = t("Käivitan Steami…");
+    error = "";
+    try {
+      const started = await invoke("start_steam");
+      if (!started) {
+        error = t("Steami käivitamine ebaõnnestus. Käivita Steam käsitsi.");
+        return false;
+      }
+      if (snapshot) snapshot.summary.steam_running = true;
+      return true;
+    } catch (err) {
+      error = t("Steami käivitamine ebaõnnestus: {error}", {
+        error: String(err),
+      });
+      return false;
+    } finally {
+      busy = false;
+      busyText = "";
+    }
+  }
+
   async function startCurrentProfile() {
     if (!currentProfile || busy) return;
     error = "";
@@ -1659,10 +1692,6 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
       busyText = "";
     }
     if (!status) return;
-    if (!status.steam_running) {
-      error = t("Steam ei tööta. Käivita Steam ja proovi uuesti.");
-      return;
-    }
     if (status.aml_running) {
       error = t("AML on lahti. Sulge AML enne käivitamist.");
       return;
@@ -1675,6 +1704,7 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
       setWorkshopWarning(status.workshop_path_warning);
       return;
     }
+    if (!(await ensureSteam(status))) return;
     if (snapshot.summary.missing > 0) {
       const ok = window.confirm(
         t("Selles profiilis on {count} puuduvat aktiivset modi. Kas käivitada ikkagi?", {
