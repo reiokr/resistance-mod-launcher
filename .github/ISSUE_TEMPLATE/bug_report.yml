@@ -16,7 +16,7 @@ body:
     attributes:
       label: App version
       description: Output of `--version`
-      placeholder: xcom2-mod-launcher 0.3.2
+      placeholder: xcom2-mod-launcher 0.3.3
     validations:
       required: true
 

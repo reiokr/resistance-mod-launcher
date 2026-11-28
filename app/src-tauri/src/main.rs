@@ -1180,6 +1180,45 @@ fn save_profile(name: String, active_ids: Vec<String>) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn profile_history(name: String) -> Result<Vec<state::ProfileRevisionView>, String> {
+    let app_state = state::load().map_err(|err| format!("{err:#}"))?;
+    state::profile_history(&app_state, &name).map_err(|err| format!("{err:#}"))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn get_profile_revision(name: String, revision_id: i64) -> Result<state::ProfileRevision, String> {
+    let app_state = state::load().map_err(|err| format!("{err:#}"))?;
+    state::get_profile_revision(&app_state, &name, revision_id).map_err(|err| format!("{err:#}"))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn restore_profile_revision(name: String, revision_id: i64) -> Result<Vec<String>, String> {
+    let mut app_state = state::load().map_err(|err| format!("{err:#}"))?;
+    let active_ids = state::restore_profile_revision(&mut app_state, &name, revision_id)
+        .map_err(|err| format!("{err:#}"))?;
+    state::save(&app_state).map_err(|err| format!("{err:#}"))?;
+    Ok(active_ids)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn duplicate_profile(source: String, name: String) -> Result<String, String> {
+    let mut app_state = state::load().map_err(|err| format!("{err:#}"))?;
+    let profile = state::duplicate_profile(&mut app_state, &source, &name)
+        .map_err(|err| format!("{err:#}"))?;
+    state::save(&app_state).map_err(|err| format!("{err:#}"))?;
+    Ok(profile.name)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn sync_profile_to_parent(name: String) -> Result<state::ProfileSyncResult, String> {
+    let mut app_state = state::load().map_err(|err| format!("{err:#}"))?;
+    let result =
+        state::sync_profile_to_parent(&mut app_state, &name).map_err(|err| format!("{err:#}"))?;
+    state::save(&app_state).map_err(|err| format!("{err:#}"))?;
+    Ok(result)
+}
+
+#[tauri::command]
 fn delete_profile(name: String) -> Result<(), String> {
     let mut app_state = state::load().map_err(|err| format!("{err:#}"))?;
     state::delete_profile(&mut app_state, &name).map_err(|err| format!("{err:#}"))?;
@@ -1316,6 +1355,9 @@ fn create_empty_profile(name: String, description: Option<String>) -> Result<Str
         excluded_workshop_ids: Vec::new(),
         deactivated_mod_ids: Vec::new(),
         cover_image: None,
+        revisions: Vec::new(),
+        parent: None,
+        parent_updated: None,
         updated: now_unix(),
     };
     state::create_profile(&mut app_state, profile).map_err(|err| format!("{err:#}"))?;
@@ -1419,6 +1461,9 @@ fn create_profile_from_collection_impl(
             excluded_workshop_ids,
             deactivated_mod_ids: Vec::new(),
             cover_image: None,
+            revisions: Vec::new(),
+            parent: None,
+            parent_updated: None,
             updated: now_unix(),
         },
     )?;
@@ -1494,6 +1539,7 @@ async fn add_collection_mods_to_profile(
             .collect();
         let added;
         {
+            state::push_profile_revision_by_name(&mut app_state, &name)?;
             let profile = &mut app_state.profiles[profile_index];
             let before = profile.active_ids.len();
             for id in &selected_mod_ids {
@@ -2074,6 +2120,11 @@ fn main() {
             list_mod_trash,
             restore_mod_trash,
             get_profile,
+            profile_history,
+            get_profile_revision,
+            restore_profile_revision,
+            duplicate_profile,
+            sync_profile_to_parent,
             set_profile_mod_deactivated,
             restore_profile_mod,
             export_profile,

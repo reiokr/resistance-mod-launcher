@@ -18,6 +18,15 @@
   let categoryFilter = $state("all");
   let tagFilter = $state("all");
   let tab = $state("mods");
+  const DETAILS_DEFAULT_WIDTH = 400;
+  function initialDetailsWidth() {
+    const saved = Number(localStorage.getItem("resistance-details-width"));
+    return Number.isFinite(saved) && saved >= 260
+      ? saved
+      : DETAILS_DEFAULT_WIDTH;
+  }
+  let detailsWidth = $state(initialDetailsWidth());
+  let detailsResizing = $state(false);
   function initialLanguage() {
     const saved = localStorage.getItem("resistance-lang");
     if (saved === "et" || saved === "en") return saved;
@@ -99,6 +108,15 @@
   let collectionSelected = $state(new Set());
   let collectionIncludePending = $state(true);
   let editingProfile = $state(null);
+  let historyOpen = $state(false);
+  let historyProfileName = $state(null);
+  let historyEntries = $state([]);
+  let historyLoading = $state(false);
+  let historyError = $state("");
+  let historySelected = $state(null);
+  let historyRevision = $state(null);
+  let historyRevisionLoading = $state(false);
+  let historyRestoring = $state(false);
   let profileCollectionOpen = $state(false);
   let profileCollectionName = $state("");
   let profileCollectionPreview = $state(null);
@@ -150,12 +168,18 @@
   let readmeLoading = $state(false);
   let readmeError = $state("");
   let aboutOpen = $state(false);
-  let appVersion = $state("0.3.2");
+  let appVersion = $state("0.3.3");
 
   onMount(() => {
     document.documentElement.lang = lang;
+    detailsWidth = clampDetailsWidth(detailsWidth);
+    const onWindowResize = () => {
+      detailsWidth = clampDetailsWidth(detailsWidth);
+    };
+    window.addEventListener("resize", onWindowResize);
     getVersion().then((version) => (appVersion = version)).catch(() => {});
     load();
+    return () => window.removeEventListener("resize", onWindowResize);
   });
 
   async function load() {
@@ -214,6 +238,30 @@
       snapshot.profiles.some((profile) => profile.count > 0)
   );
   const modsById = $derived(new Map((snapshot?.mods ?? []).map((mod) => [mod.id, mod])));
+  const historyProfile = $derived(
+    snapshot?.profiles.find((profile) => profile.name === historyProfileName) ?? null
+  );
+  const historyCurrentIds = $derived(
+    historyProfile
+      ? effectiveIds(historyProfile.active_ids, historyProfile.deactivated_mod_ids)
+      : []
+  );
+  const historyRevisionIds = $derived(
+    historyRevision
+      ? effectiveIds(
+          historyRevision.active_ids,
+          historyRevision.deactivated_mod_ids
+        )
+      : []
+  );
+  const historyDiff = $derived(
+    diffLists(historyRevisionIds, historyCurrentIds)
+  );
+  const editingDiff = $derived(
+    profileBaseline
+      ? diffLists(profileBaseline, activeOrder)
+      : { added: [], removed: [], reordered: [] }
+  );
   const activeMods = $derived(
     activeOrder.map((id) => modsById.get(id)).filter(Boolean)
   );
@@ -1222,7 +1270,14 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
         const profile = snapshot.profiles.find((entry) => entry.name === name);
         if (profile) {
           profile.count = savedIds.length;
+          profile.active_ids = [...savedIds];
           profile.updated = Math.floor(Date.now() / 1000);
+          try {
+            const history = await invoke("profile_history", { name });
+            profile.revision_count = history.length;
+          } catch {
+            // The profile itself was saved; the history badge can refresh later.
+          }
         }
       }
       editingProfile = null;
@@ -1368,6 +1423,206 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
       tab = "order";
       diagnosticsScanToken += 1;
       diagnosticsSignature = null;
+    } catch (err) {
+      error = String(err);
+    } finally {
+      busy = false;
+      busyText = "";
+    }
+  }
+
+  async function openProfileHistory(profile) {
+    historyOpen = true;
+    historyProfileName = profile.name;
+    historyEntries = [];
+    historySelected = null;
+    historyRevision = null;
+    historyError = "";
+    historyLoading = true;
+    try {
+      historyEntries = await invoke("profile_history", { name: profile.name });
+      if (historyEntries.length > 0) {
+        await selectHistoryRevision(historyEntries[0].id);
+      }
+    } catch (err) {
+      historyError = String(err);
+    } finally {
+      historyLoading = false;
+    }
+  }
+
+  async function selectHistoryRevision(revisionId) {
+    historySelected = revisionId;
+    historyRevision = null;
+    historyError = "";
+    historyRevisionLoading = true;
+    try {
+      historyRevision = await invoke("get_profile_revision", {
+        name: historyProfileName,
+        revision_id: revisionId,
+      });
+    } catch (err) {
+      historyError = String(err);
+    } finally {
+      historyRevisionLoading = false;
+    }
+  }
+
+  function closeProfileHistory() {
+    if (historyRestoring) return;
+    historyOpen = false;
+    historyProfileName = null;
+    historyEntries = [];
+    historySelected = null;
+    historyRevision = null;
+    historyError = "";
+    historyLoading = false;
+    historyRevisionLoading = false;
+  }
+
+  async function restoreHistoryRevision() {
+    if (!historyProfile || !historyRevision || historyRestoring) return;
+    const name = historyProfile.name;
+    const unsaved =
+      currentProfile === name && profileDirty
+        ? "\n\n" + t("Sul on salvestamata muudatusi. Need kaotatakse.")
+        : "";
+    if (
+      !window.confirm(
+        t("Taastada see versioon? Praegune seis salvestatakse ajalukku.") +
+          unsaved
+      )
+    ) {
+      return;
+    }
+    const revisionId = historyRevision.id;
+    historyRestoring = true;
+    busy = true;
+    busyText = t("Taastan versiooni…");
+    error = "";
+    try {
+      await invoke("restore_profile_revision", {
+        name,
+        revision_id: revisionId,
+      });
+      historyOpen = false;
+      await load();
+      if (error) return;
+      if (currentProfile === name) {
+        await applyProfileForSimple(name);
+      }
+      message = t("Versioon taastatud: {name}", { name });
+    } catch (err) {
+      historyError = String(err);
+    } finally {
+      historyRestoring = false;
+      busy = false;
+      busyText = "";
+    }
+  }
+
+  async function duplicateProfile(profile) {
+    if (busy) return;
+    if (
+      currentProfile === profile.name &&
+      profileDirty &&
+      !window.confirm(
+        t("Dubleeritakse viimati salvestatud seis. Profiilis on salvestamata muudatusi. Jätkata?")
+      )
+    ) {
+      return;
+    }
+    const name = window.prompt(
+      t("Uue profiili nimi:"),
+      `${profile.name} (test)`
+    );
+    if (!name || !name.trim()) return;
+
+    busy = true;
+    busyText = t("Dubleerin profiili…");
+    error = "";
+    message = "";
+    try {
+      const created = await invoke("duplicate_profile", {
+        source: profile.name,
+        name: name.trim(),
+      });
+      await load();
+      message = t("Profiil loodud: {name}", { name: created });
+    } catch (err) {
+      error = String(err);
+    } finally {
+      busy = false;
+      busyText = "";
+    }
+  }
+
+  async function syncProfileToParent(profile) {
+    if (!profile.parent || busy) return;
+    const parent = snapshot?.profiles.find(
+      (entry) => entry.name === profile.parent
+    );
+    if (!parent) {
+      error = t("Originaalprofiili ei leitud: {name}", {
+        name: profile.parent,
+      });
+      return;
+    }
+
+    busy = true;
+    busyText = t("Kontrollin muudatusi…");
+    error = "";
+    try {
+      const [childIds, parentIds] = await Promise.all([
+        invoke("get_profile", { name: profile.name }),
+        invoke("get_profile", { name: profile.parent }),
+      ]);
+      const childEffective = effectiveIds(
+        childIds,
+        profile.deactivated_mod_ids
+      );
+      const parentEffective = effectiveIds(
+        parentIds,
+        parent.deactivated_mod_ids
+      );
+      const diff = diffLists(parentEffective, childEffective);
+      const changed =
+        profile.parent_updated != null &&
+        parent.updated !== profile.parent_updated;
+      let text = t(
+        "Uuendada profiili „{parent}” selle testkoopiaga?\n\n+{added} lisatud, −{removed} eemaldatud.",
+        {
+          parent: profile.parent,
+          added: diff.added.length,
+          removed: diff.removed.length,
+        }
+      );
+      if (changed) {
+        text +=
+          "\n\n" +
+          t(
+            "Originaali on vahepeal muudetud. Sünkroonimine asendab selle nimekirja; vana seis jääb ajalukku."
+          );
+      }
+      if (
+        currentProfile === profile.parent &&
+        profileDirty
+      ) {
+        text +=
+          "\n\n" +
+          t("Originaalprofiilis on salvestamata muudatusi. Need kaotatakse.");
+      }
+      if (!window.confirm(text)) return;
+
+      busyText = t("Uuendan originaali…");
+      const result = await invoke("sync_profile_to_parent", {
+        name: profile.name,
+      });
+      await load();
+      message = t("Profiil „{name}” uuendatud: {count} modi.", {
+        name: result.parent,
+        count: result.active_count,
+      });
     } catch (err) {
       error = String(err);
     } finally {
@@ -1983,6 +2238,12 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     readmeError = "";
   }
 
+  function closeProfileMenus(event) {
+    for (const details of document.querySelectorAll("details.profile-menu[open]")) {
+      if (!details.contains(event.target)) details.removeAttribute("open");
+    }
+  }
+
   function handleWindowKeydown(event) {
     if (configOpen) {
       if (event.key === "Escape") {
@@ -2020,6 +2281,87 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     return new Date(seconds * 1000).toLocaleString();
   }
 
+  function effectiveIds(ids, deactivated) {
+    const disabled = new Set(deactivated ?? []);
+    return (ids ?? []).filter((id) => !disabled.has(id));
+  }
+
+  function diffLists(before, after) {
+    const beforeSet = new Set(before ?? []);
+    const afterSet = new Set(after ?? []);
+    const added = (after ?? []).filter((id) => !beforeSet.has(id));
+    const removed = (before ?? []).filter((id) => !afterSet.has(id));
+    const commonBefore = (before ?? []).filter((id) => afterSet.has(id));
+    const commonAfter = (after ?? []).filter((id) => beforeSet.has(id));
+    const reordered = commonAfter.filter(
+      (id, index) => commonBefore[index] !== id
+    );
+    return { added, removed, reordered };
+  }
+
+  function modLabel(id) {
+    return modsById.get(id)?.name || id;
+  }
+
+  function clampDetailsWidth(value) {
+    const max = Math.max(320, Math.min(1200, window.innerWidth - 480));
+    return Math.min(max, Math.max(260, Math.round(value)));
+  }
+
+  function persistDetailsWidth() {
+    localStorage.setItem("resistance-details-width", String(detailsWidth));
+  }
+
+  function startDetailsResize(event) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = detailsWidth;
+    detailsResizing = true;
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+
+    const onMove = (moveEvent) => {
+      detailsWidth = clampDetailsWidth(
+        startWidth + (startX - moveEvent.clientX)
+      );
+    };
+    const finish = () => {
+      detailsResizing = false;
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      persistDetailsWidth();
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      window.removeEventListener("blur", finish);
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
+    window.addEventListener("blur", finish);
+  }
+
+  function handleDetailsResizeKey(event) {
+    const step = event.shiftKey ? 60 : 20;
+    if (event.key === "ArrowLeft") {
+      detailsWidth = clampDetailsWidth(detailsWidth + step);
+    } else if (event.key === "ArrowRight") {
+      detailsWidth = clampDetailsWidth(detailsWidth - step);
+    } else if (event.key === "Home") {
+      detailsWidth = clampDetailsWidth(DETAILS_DEFAULT_WIDTH);
+    } else {
+      return;
+    }
+    event.preventDefault();
+    persistDetailsWidth();
+  }
+
+  function resetDetailsWidth() {
+    detailsWidth = clampDetailsWidth(DETAILS_DEFAULT_WIDTH);
+    persistDetailsWidth();
+  }
+
   function formatSize(bytes) {
     if (bytes === null || bytes === undefined || bytes <= 0) return "—";
     const units = ["B", "KB", "MB", "GB"];
@@ -2033,7 +2375,7 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
   }
 </script>
 
-<svelte:window onkeydown={handleWindowKeydown} />
+<svelte:window onkeydown={handleWindowKeydown} onclick={closeProfileMenus} />
 
 <div class="shell">
   <header class="topbar">
@@ -2188,6 +2530,11 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
       <div class="editing-text">
         <strong>{t("Muudad profiili „{name}”.", { name: editingProfile })}</strong>
         <span>{t("Muudatused lähevad profiili alles „Salvesta profiil” vajutamisel.")}</span>
+        {#if editingDiff.added.length > 0 || editingDiff.removed.length > 0}
+          <span class="editing-diff">
+            +{editingDiff.added.length} / −{editingDiff.removed.length}
+          </span>
+        {/if}
       </div>
       <div class="editing-actions">
         <button class="primary" onclick={saveCurrentProfile} disabled={busy}>
@@ -2685,6 +3032,9 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
                   </div>
                   <div class="profile-card-meta">
                     <span>{t("{count} modi", { count: profile.count })}</span>
+                    {#if profile.revision_count > 0}
+                      <span class="muted">{t("{count} versiooni", { count: profile.revision_count })}</span>
+                    {/if}
                     {#if profile.source_title}
                       <span class="muted">{profile.source_title}</span>
                     {/if}
@@ -2697,31 +3047,56 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
                       {t("Profiil on tühi. Vajuta „Lisa modisid”.")}
                     </p>
                   {/if}
+                  {#if profile.parent}
+                    <div class="profile-parent">
+                      <span>{t("Põhineb: {name}", { name: profile.parent })}</span>
+                    </div>
+                  {/if}
                 </div>
                 <div class="profile-actions">
                   <button class="mini" onclick={() => editProfile(profile)} disabled={busy}>
                     {profile.count === 0 ? t("Lisa modisid") : t("Muuda modisid")}
                   </button>
-                  {#if profile.source_id}
-                    <button class="mini" onclick={() => openProfileCollection(profile)}>
-                      {t("Kollektsioon")}
-                    </button>
-                    <button
-                      class="mini"
-                      onclick={() => invoke("open_workshop", { id: profile.source_id })}
-                    >{t("Ava Steamis")}</button>
-                  {/if}
-                  <button class="mini" onclick={() => pickProfileCover(profile)}>
-                    {profileCovers[profile.name] ? t("Muuda pilti") : t("Lisa pilt")}
-                  </button>
-                  {#if profileCovers[profile.name]}
-                    <button class="mini danger" onclick={() => clearProfileCover(profile)}>
-                      {t("Eemalda pilt")}
-                    </button>
-                  {/if}
-                  <button class="mini" onclick={() => exportProfile(profile)}>{t("Ekspordi")}</button>
                   <button class="mini" onclick={() => applyProfile(profile.name)}>{t("Rakenda")}</button>
-                  <button class="mini danger" onclick={() => askDeleteProfile(profile)}>{t("Kustuta")}</button>
+                  <details class="profile-menu">
+                    <summary class="mini" title={t("Rohkem toiminguid")}>⋯</summary>
+                    <div
+                      class="profile-menu-items"
+                      onclick={(event) =>
+                        event.currentTarget.closest("details")?.removeAttribute("open")}
+                    >
+                      <button class="mini" onclick={() => openProfileHistory(profile)} disabled={busy}>
+                        {t("Ajalugu")}{profile.revision_count > 0 ? ` (${profile.revision_count})` : ""}
+                      </button>
+                      <button class="mini" onclick={() => duplicateProfile(profile)} disabled={busy}>
+                        {t("Dubleeri")}
+                      </button>
+                      {#if profile.parent}
+                        <button class="mini" onclick={() => syncProfileToParent(profile)} disabled={busy}>
+                          {t("Uuenda originaali")}
+                        </button>
+                      {/if}
+                      {#if profile.source_id}
+                        <button class="mini" onclick={() => openProfileCollection(profile)}>
+                          {t("Kollektsioon")}
+                        </button>
+                        <button
+                          class="mini"
+                          onclick={() => invoke("open_workshop", { id: profile.source_id })}
+                        >{t("Ava Steamis")}</button>
+                      {/if}
+                      <button class="mini" onclick={() => pickProfileCover(profile)}>
+                        {profileCovers[profile.name] ? t("Muuda pilti") : t("Lisa pilt")}
+                      </button>
+                      {#if profileCovers[profile.name]}
+                        <button class="mini danger" onclick={() => clearProfileCover(profile)}>
+                          {t("Eemalda pilt")}
+                        </button>
+                      {/if}
+                      <button class="mini" onclick={() => exportProfile(profile)}>{t("Ekspordi")}</button>
+                      <button class="mini danger" onclick={() => askDeleteProfile(profile)}>{t("Kustuta")}</button>
+                    </div>
+                  </details>
                 </div>
               </div>
             {/each}
@@ -3036,7 +3411,22 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
       {/if}
 
       {#if selected}
-        <aside class="details">
+        <div
+          class="details-resizer"
+          class:active={detailsResizing}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={t("Muuda külgpaneeli laiust")}
+          aria-valuenow={detailsWidth}
+          aria-valuemin={260}
+          aria-valuemax={1200}
+          tabindex="0"
+          title={t("Lohista paneeli laiuse muutmiseks. Topeltklõps taastab vaikeväärtuse.")}
+          onpointerdown={startDetailsResize}
+          onkeydown={handleDetailsResizeKey}
+          ondblclick={resetDetailsWidth}
+        ></div>
+        <aside class="details" style:width={`${detailsWidth}px`}>
           <button
             class="close"
             onclick={() => {
@@ -3519,6 +3909,163 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
             disabled={busy || collectionLoading || !profileDraftName.trim() || (profileMode === "collection" && !collectionPreview)}
           >{t("Loo profiil")}</button>
         </footer>
+      </div>
+    </div>
+  {/if}
+
+  {#if historyOpen}
+    <div
+      class="config-backdrop"
+      role="presentation"
+      onclick={(event) => {
+        if (event.target === event.currentTarget) closeProfileHistory();
+      }}
+      onkeydown={(event) => {
+        if (event.key === "Escape") closeProfileHistory();
+      }}
+    >
+      <div
+        class="config-modal history-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("Profiili ajalugu")}
+      >
+        <header class="config-head">
+          <div>
+            <h2>{t("Profiili ajalugu")}</h2>
+            <p class="muted">{historyProfile?.name ?? ""}</p>
+          </div>
+          <div class="config-head-actions">
+            <button class="ghost" onclick={closeProfileHistory} disabled={historyRestoring}>
+              {t("Sulge")}
+            </button>
+          </div>
+        </header>
+
+        <div class="history-body">
+          <aside class="history-list">
+            {#if historyProfile}
+              <div class="history-current">
+                <strong>{t("Praegune")}</strong>
+                <span>{t("{count} modi", { count: historyCurrentIds.length })}</span>
+              </div>
+            {/if}
+
+            {#if historyLoading}
+              <div class="loading">
+                <div class="spinner"></div>
+                <span>{t("Laen ajalugu…")}</span>
+              </div>
+            {:else if historyEntries.length === 0}
+              <div class="empty">
+                {t("Ajalugu on tühi. Iga Salvesta profiil loob uue versiooni.")}
+              </div>
+            {:else}
+              {#each historyEntries as entry (entry.id)}
+                <button
+                  type="button"
+                  class="history-entry"
+                  class:active={historySelected === entry.id}
+                  onclick={() => selectHistoryRevision(entry.id)}
+                  disabled={historyRestoring}
+                >
+                  <strong>{formatUnix(entry.saved_at)}</strong>
+                  <span>{t("{count} modi", { count: entry.active_count })}</span>
+                </button>
+              {/each}
+            {/if}
+          </aside>
+
+          <section class="history-detail">
+            {#if historyError}
+              <div class="banner error">{historyError}</div>
+            {:else if historyRevisionLoading}
+              <div class="loading">
+                <div class="spinner"></div>
+                <span>{t("Laen versiooni…")}</span>
+              </div>
+            {:else if historyRevision}
+              <div class="history-detail-head">
+                <div>
+                  <strong>{formatUnix(historyRevision.saved_at)}</strong>
+                  <span class="muted">{t("Võrreldes praegusega")}</span>
+                </div>
+                <div class="history-counts">
+                  <span class="added">+{historyDiff.added.length}</span>
+                  <span class="removed">−{historyDiff.removed.length}</span>
+                  <span class="reordered">↕ {historyDiff.reordered.length}</span>
+                </div>
+              </div>
+
+              {#if historyDiff.added.length === 0 && historyDiff.removed.length === 0 && historyDiff.reordered.length === 0}
+                <div class="empty">{t("Muutusi ei ole.")}</div>
+              {:else}
+                {#if historyDiff.added.length > 0}
+                  <h3>
+                    {t("Lisatud")}
+                    <span class="muted">{historyDiff.added.length}</span>
+                  </h3>
+                  <ul class="history-changes">
+                    {#each historyDiff.added.slice(0, 100) as id (id)}
+                      <li>{modLabel(id)}</li>
+                    {/each}
+                  </ul>
+                  {#if historyDiff.added.length > 100}
+                    <p class="muted">
+                      {t("ja veel {count}", { count: historyDiff.added.length - 100 })}
+                    </p>
+                  {/if}
+                {/if}
+
+                {#if historyDiff.removed.length > 0}
+                  <h3>
+                    {t("Eemaldatud")}
+                    <span class="muted">{historyDiff.removed.length}</span>
+                  </h3>
+                  <ul class="history-changes">
+                    {#each historyDiff.removed.slice(0, 100) as id (id)}
+                      <li>{modLabel(id)}</li>
+                    {/each}
+                  </ul>
+                  {#if historyDiff.removed.length > 100}
+                    <p class="muted">
+                      {t("ja veel {count}", { count: historyDiff.removed.length - 100 })}
+                    </p>
+                  {/if}
+                {/if}
+
+                {#if historyDiff.reordered.length > 0}
+                  <h3>
+                    {t("Ümber järjestatud")}
+                    <span class="muted">{historyDiff.reordered.length}</span>
+                  </h3>
+                  <ul class="history-changes">
+                    {#each historyDiff.reordered.slice(0, 100) as id (id)}
+                      <li>{modLabel(id)}</li>
+                    {/each}
+                  </ul>
+                  {#if historyDiff.reordered.length > 100}
+                    <p class="muted">
+                      {t("ja veel {count}", { count: historyDiff.reordered.length - 100 })}
+                    </p>
+                  {/if}
+                {/if}
+              {/if}
+
+              <div class="history-actions">
+                <button
+                  class="primary"
+                  onclick={restoreHistoryRevision}
+                  disabled={historyRestoring || busy}
+                >
+                  {historyRestoring ? t("Taastan versiooni…") : t("Taasta see versioon")}
+                </button>
+              </div>
+            {:else}
+              <div class="empty">{t("Vali versioon.")}</div>
+            {/if}
+          </section>
+        </div>
       </div>
     </div>
   {/if}
@@ -4236,6 +4783,12 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     font-size: 13px;
   }
 
+  .editing-diff {
+    color: #f3d28a;
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+  }
+
   .editing-actions {
     display: flex;
     gap: 8px;
@@ -4908,6 +5461,218 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
     -webkit-box-orient: vertical;
     overflow: hidden;
     white-space: pre-wrap;
+  }
+
+  .profile-parent {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+    color: #728196;
+    font-size: 11px;
+  }
+
+  .profile-parent .mini {
+    font-size: 10.5px;
+  }
+
+  .profile-menu {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .profile-menu > summary {
+    list-style: none;
+    min-width: 30px;
+    text-align: center;
+    cursor: pointer;
+  }
+
+  .profile-menu > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .profile-menu[open] > summary {
+    border-color: #2bb3ff;
+    color: #cfeaff;
+  }
+
+  .profile-menu-items {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 190px;
+    padding: 6px;
+    border: 1px solid #263244;
+    border-radius: 9px;
+    background: #121a24;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  }
+
+  .profile-menu-items .mini {
+    width: 100%;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .history-modal {
+    width: min(1100px, 100%);
+    height: min(820px, 100%);
+  }
+
+  .history-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
+
+  .history-list {
+    width: 270px;
+    flex-shrink: 0;
+    padding: 10px;
+    border-right: 1px solid #1c2635;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .history-current {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 6px;
+    padding: 8px 10px;
+    border: 1px solid rgba(61, 220, 151, 0.3);
+    border-radius: 8px;
+    background: rgba(61, 220, 151, 0.06);
+  }
+
+  .history-current strong {
+    color: #8ff0c5;
+    font-size: 12px;
+  }
+
+  .history-current span {
+    color: #728196;
+    font-size: 10.5px;
+  }
+
+  .history-entry {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: #b9c7d8;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .history-entry:hover {
+    background: #151c26;
+    border-color: #263244;
+  }
+
+  .history-entry.active {
+    background: #1c2635;
+    border-color: #2bb3ff;
+  }
+
+  .history-entry strong {
+    color: #d7e0ea;
+    font-size: 11.5px;
+  }
+
+  .history-entry span {
+    color: #728196;
+    font-size: 10.5px;
+  }
+
+  .history-detail {
+    flex: 1;
+    min-width: 0;
+    padding: 14px 18px;
+    overflow: auto;
+  }
+
+  .history-detail-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+
+  .history-detail-head strong {
+    display: block;
+    font-size: 13px;
+  }
+
+  .history-detail-head .muted {
+    font-size: 11px;
+  }
+
+  .history-counts {
+    display: flex;
+    gap: 8px;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .history-counts .added {
+    color: #3ddc97;
+  }
+
+  .history-counts .removed {
+    color: #ff6b6b;
+  }
+
+  .history-counts .reordered {
+    color: #f3d28a;
+  }
+
+  .history-detail h3 {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    margin: 14px 0 5px;
+    color: #cfdae8;
+    font-size: 12px;
+  }
+
+  .history-changes {
+    max-height: 220px;
+    margin: 0;
+    padding: 6px 9px;
+    border: 1px solid #1c2635;
+    border-radius: 8px;
+    background: #0b1017;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow: auto;
+    color: #9fb3c8;
+    font-size: 11px;
+  }
+
+  .history-changes li {
+    overflow-wrap: anywhere;
+  }
+
+  .history-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 18px;
   }
 
   .profile-actions {
@@ -5648,6 +6413,34 @@ t("Unustada {count} käsitsi määratud kategoorianäidet? Kategooriad ise jää
   button.mini.danger {
     color: #ff9f9f;
     border-color: rgba(255, 107, 107, 0.3);
+  }
+
+  .details-resizer {
+    flex-shrink: 0;
+    width: 8px;
+    cursor: col-resize;
+    position: relative;
+    background: transparent;
+    outline: none;
+  }
+
+  .details-resizer::after {
+    content: "";
+    position: absolute;
+    left: 3px;
+    top: 50%;
+    width: 2px;
+    height: 48px;
+    border-radius: 2px;
+    background: #2a3648;
+    transform: translateY(-50%);
+    transition: background 120ms ease;
+  }
+
+  .details-resizer:hover::after,
+  .details-resizer:focus-visible::after,
+  .details-resizer.active::after {
+    background: #2bb3ff;
   }
 
   .details {

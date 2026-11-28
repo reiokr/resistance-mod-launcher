@@ -327,6 +327,9 @@ fn build_profile(
         excluded_workshop_ids: file.profile.excluded_workshop_ids.clone(),
         deactivated_mod_ids,
         cover_image: None,
+        revisions: Vec::new(),
+        parent: None,
+        parent_updated: None,
         updated: now(),
     };
     (profile, missing_count)
@@ -526,7 +529,7 @@ mod tests {
             format: FORMAT.to_string(),
             version: VERSION,
             exported_at: 1,
-            app_version: "0.3.2".to_string(),
+            app_version: "0.3.3".to_string(),
             game: GAME.to_string(),
             workshop_app_id: APP_ID,
             profile: ProfileData {

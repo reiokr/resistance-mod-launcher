@@ -26,6 +26,12 @@ profile with its own load order, deactivated mods and missing/pending Workshop
 IDs. Apply a profile, press **Save**, launch. Profiles can also be exported and
 imported on another machine, so a modpack is no longer tied to one installation.
 
+Every **Save profile** keeps the previous state in the profile history (up to
+20 versions). The history view shows added, removed and reordered mods, restores
+an older version, and keeps the current state as a new version first. A profile
+can be duplicated as a test copy; when the copy works, **Update original**
+syncs it back to the parent profile.
+
 ## Before you start
 
 | Requirement | Required? | Why |
@@ -223,8 +229,10 @@ load order, profiles, categories, diagnostics and config editing. **Simple**
 shows only the profile cards and the Start button for day-to-day modpack
 switching; open it with **Simple view** in the top bar or the footer. The mode
 is remembered. Once a profile is configured, the Profiles tab offers the simple
-view once with a dismissible hint. Before launching, the app checks that the
-game's `ModRootDirs` drive resolves to the same Workshop folder as the launcher;
+view once with a dismissible hint. Profile cards also expose history,
+duplication and parent sync. The mod details pane can be resized by dragging its
+left edge; double-clicking resets the width. Before launching, the app checks
+that the game's `ModRootDirs` drive resolves to the same Workshop folder as the launcher;
 if it does not, the launch is blocked and the exact `ln -sfn` fix is shown. If
 Steam is not running, the launcher starts it and waits up to 60 seconds before
 continuing.

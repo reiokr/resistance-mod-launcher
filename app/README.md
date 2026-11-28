@@ -245,6 +245,10 @@ cargo run -- --headless-diagnostics
   description, pending count and an optional custom cover image.
   **Muuda modisid** applies the profile and opens the Mods tab with an editing
   banner; **Salvesta profiil** writes the changes back to that profile.
+  **Ajalugu** keeps the previous state (up to 20 versions), shows added,
+  removed and reordered mods, and restores an older version. **Dubleeri**
+  creates a test copy; **Uuenda originaali** syncs the copy back to its parent
+  profile.
 - **Profile picker** in the top bar: selecting a profile applies its active
   list/order immediately, runs the conflict check, and marks the profile as
   current. A yellow dot means the current list differs from the saved profile.
@@ -263,7 +267,8 @@ cargo run -- --headless-diagnostics
   A scan reads active mods' `Config/**/XComEngine.ini` and `Src/**/*.uc`;
   it takes a few seconds with ~790 mods. The last result is cached and reused
   after a restart.
-- Details pane **Muuda configut (INI)**: opens a modal with the selected mod's
+- Details pane: drag its left edge to resize the panel; double-click resets the
+  width. The chosen width is remembered. **Muuda configut (INI)**: opens a modal with the selected mod's
   `Config/**/*.ini` files. The editor shows encoding, line endings and modified
   time; **Salvesta**/Ctrl+S writes the file after a backup. **Lae uuesti**
   discards the buffer and re-reads from disk.

@@ -1,6 +1,6 @@
 [package]
 name = "xcom2-launcher-core"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2024"
 license = "GPL-3.0-only"
 description = "Native Linux core for XCOM 2 mod management (AML import prototype)"

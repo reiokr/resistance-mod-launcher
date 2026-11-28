@@ -2,6 +2,55 @@
 // A missing key falls back to the Estonian text, so new strings are safe.
 
 export const en = {
+  "Muuda külgpaneeli laiust": "Resize details panel",
+  "Lohista paneeli laiuse muutmiseks. Topeltklõps taastab vaikeväärtuse.":
+    "Drag to resize the panel. Double-click to reset.",
+
+  "Rohkem toiminguid": "More actions",
+
+  "Sul on salvestamata muudatusi. Need kaotatakse.":
+    "You have unsaved changes. They will be lost.",
+  "Originaalprofiilis on salvestamata muudatusi. Need kaotatakse.":
+    "The original profile has unsaved changes. They will be lost.",
+
+  "Profiili ajalugu": "Profile history",
+  "Praegune": "Current",
+  "{count} versiooni": "{count} versions",
+  "Ajalugu": "History",
+  "Dubleeri": "Duplicate",
+  "Põhineb: {name}": "Based on: {name}",
+  "Uuenda originaali": "Update original",
+  "Laen ajalugu…": "Loading history…",
+  "Laen versiooni…": "Loading version…",
+  "Ajalugu on tühi. Iga Salvesta profiil loob uue versiooni.":
+    "History is empty. Each Save profile creates a new version.",
+  "Võrreldes praegusega": "Compared with current",
+  "Muutusi ei ole.": "No changes.",
+  "Lisatud": "Added",
+  "Eemaldatud": "Removed",
+  "Ümber järjestatud": "Reordered",
+  "ja veel {count}": "and {count} more",
+  "Vali versioon.": "Select a version.",
+  "Taasta see versioon": "Restore this version",
+  "Taastada see versioon? Praegune seis salvestatakse ajalukku.":
+    "Restore this version? The current state will be saved in history.",
+  "Taastan versiooni…": "Restoring version…",
+  "Versioon taastatud: {name}": "Version restored: {name}",
+  "Uue profiili nimi:": "New profile name:",
+  "Dubleerin profiili…": "Duplicating profile…",
+  "Dubleeritakse viimati salvestatud seis. Profiilis on salvestamata muudatusi. Jätkata?":
+    "The last saved state will be duplicated. The profile has unsaved changes. Continue?",
+  "Kontrollin muudatusi…": "Checking changes…",
+  "Uuendada profiili „{parent}” selle testkoopiaga?\n\n+{added} lisatud, −{removed} eemaldatud.":
+    "Update profile \"{parent}\" with this test copy?\n\n+{added} added, −{removed} removed.",
+  "Originaali on vahepeal muudetud. Sünkroonimine asendab selle nimekirja; vana seis jääb ajalukku.":
+    "The original has changed in the meantime. Syncing replaces its list; the old state remains in history.",
+  "Uuendan originaali…": "Updating original…",
+  "Profiil „{name}” uuendatud: {count} modi.":
+    "Profile \"{name}\" updated: {count} mods.",
+  "Originaalprofiili ei leitud: {name}":
+    "Original profile not found: {name}",
+
   "Käivitan Steami…": "Starting Steam…",
   "Steami käivitamine ebaõnnestus. Käivita Steam käsitsi.":
     "Could not start Steam. Start Steam manually.",
